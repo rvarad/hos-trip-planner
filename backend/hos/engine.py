@@ -72,3 +72,11 @@ class PlanResult:
     segments: list[Segment]
     days: list[DayLog]
     total_miles: float
+
+
+def plan_trip(inp: TripInput) -> PlanResult:
+    """Build an HOS-compliant timeline for the trip. Engine entry point.
+
+    Not yet implemented — the HOS logic lands in T3.
+    """
+    raise NotImplementedError

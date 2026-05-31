@@ -1,4 +1,13 @@
-from hos.engine import DayLog, Location, PlanResult, Segment, TripInput
+import pytest
+
+from hos.engine import (
+    DayLog,
+    Location,
+    PlanResult,
+    Segment,
+    TripInput,
+    plan_trip,
+)
 
 
 def test_location_fields_accessible():
@@ -45,3 +54,15 @@ def test_plan_result_fields_accessible():
     assert result.segments == []
     assert result.days == []
     assert result.total_miles == 0.0
+
+
+def test_plan_trip_not_implemented():
+    trip = TripInput(
+        current_location=Location(label="Chicago, IL", lat=41.8781, lng=-87.6298),
+        pickup=Location(label="St. Louis, MO", lat=38.6270, lng=-90.1994),
+        dropoff=Location(label="Dallas, TX", lat=32.7767, lng=-96.7970),
+        cycle_hours_used=12.5,
+        start_time_minutes=480,
+    )
+    with pytest.raises(NotImplementedError):
+        plan_trip(trip)
