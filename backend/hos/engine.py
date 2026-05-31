@@ -19,3 +19,18 @@ class Location:
     label: str
     lat: float
     lng: float
+
+
+@dataclass(frozen=True)
+class TripInput:
+    """The trip request: three resolved locations plus driver clock state.
+
+    `cycle_hours_used` seeds the 70hr/8day counter; `start_time_minutes` is the
+    minute-of-day the driver goes on duty (the trip's time origin).
+    """
+
+    current_location: Location
+    pickup: Location
+    dropoff: Location
+    cycle_hours_used: float
+    start_time_minutes: int
