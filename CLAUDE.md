@@ -6,6 +6,13 @@ filled-in ELD daily log sheets.
 
 Scope: a focused MVP — favor a clean, working core over breadth.
 
+## Tasks
+
+- All work is broken into tasks under `tasks/`. Each task has its own file
+  (`tasks/T<N>.md`, e.g. `tasks/T6.md`), with subtasks as checkboxes.
+- `tasks/README.md` is the index: the full task list with statuses and the
+  suggested ordering. Start there to see what exists and what's next.
+
 ## Working protocol (follow every session)
 
 - We work ONE subtask per session. I'll name the task file and subtask.
