@@ -47,3 +47,15 @@ class Segment:
     kind: str
     start: int
     duration: int
+
+
+@dataclass(frozen=True)
+class DayLog:
+    """One calendar day of the timeline.
+
+    `date_offset` is the number of days from trip start (0 = first day);
+    `segments` are the duty-status stretches falling within that day.
+    """
+
+    date_offset: int
+    segments: list[Segment]
