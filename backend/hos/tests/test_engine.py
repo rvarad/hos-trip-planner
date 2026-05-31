@@ -1,4 +1,4 @@
-from hos.engine import Location, TripInput
+from hos.engine import Location, Segment, TripInput
 
 
 def test_location_fields_accessible():
@@ -24,3 +24,10 @@ def test_trip_input_fields_accessible():
     assert trip.dropoff.lng == -96.7970
     assert trip.cycle_hours_used == 12.5
     assert trip.start_time_minutes == 480
+
+
+def test_segment_fields_accessible():
+    seg = Segment(kind="driving", start=0, duration=240)
+    assert seg.kind == "driving"
+    assert seg.start == 0
+    assert seg.duration == 240

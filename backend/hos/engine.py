@@ -34,3 +34,16 @@ class TripInput:
     dropoff: Location
     cycle_hours_used: float
     start_time_minutes: int
+
+
+@dataclass(frozen=True)
+class Segment:
+    """One stretch of the timeline in a single duty status.
+
+    `kind` is one of "driving", "on_duty", "off_duty", "sleeper". `start` and
+    `duration` are integer minutes from trip start.
+    """
+
+    kind: str
+    start: int
+    duration: int
