@@ -59,3 +59,16 @@ class DayLog:
 
     date_offset: int
     segments: list[Segment]
+
+
+@dataclass(frozen=True)
+class PlanResult:
+    """The engine's output.
+
+    `segments` is the full flat timeline; `days` is the same timeline sliced
+    into per-day logs; `total_miles` is the planned trip distance.
+    """
+
+    segments: list[Segment]
+    days: list[DayLog]
+    total_miles: float

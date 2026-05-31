@@ -1,4 +1,4 @@
-from hos.engine import DayLog, Location, Segment, TripInput
+from hos.engine import DayLog, Location, PlanResult, Segment, TripInput
 
 
 def test_location_fields_accessible():
@@ -38,3 +38,10 @@ def test_day_log_fields_accessible():
     day = DayLog(date_offset=0, segments=[seg])
     assert day.date_offset == 0
     assert day.segments[0].kind == "driving"
+
+
+def test_plan_result_fields_accessible():
+    result = PlanResult(segments=[], days=[], total_miles=0.0)
+    assert result.segments == []
+    assert result.days == []
+    assert result.total_miles == 0.0
