@@ -50,3 +50,9 @@ class PlanResultSerializer(serializers.Serializer):
     segments = DutySegmentSerializer(many=True)
     days = DayLogSerializer(many=True)
     total_miles = serializers.FloatField()
+
+
+class PlanTripResponseSerializer(PlanResultSerializer):
+    """The plan plus the trip-level routing source ("osrm" or "estimated")."""
+
+    routing = serializers.CharField()

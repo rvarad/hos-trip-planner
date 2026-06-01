@@ -6,7 +6,7 @@
 | T2  | HOS engine data shapes + function skeleton  | done        |
 | T3  | HOS engine logic + tests                    | done        |
 | T4  | DRF POST /api/plan-trip                     | done        |
-| T5  | Geo provider stack + routing integration    | in progress |
+| T5  | Geo provider stack + routing integration    | done        |
 | T5a | Geo stack setup (map foundation)            | not started |
 | T6  | Next.js MUI input form                      | not started |
 | T6a | Reusable `<MapView>` component              | not started |

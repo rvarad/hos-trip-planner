@@ -74,6 +74,19 @@ def _leg(start: Location, end: Location) -> RouteLeg:
 
 def build_legs(
     current: Location, pickup: Location, dropoff: Location
-) -> list[RouteLeg]:
-    """Two driving legs: current → pickup, then pickup → drop-off."""
-    return [_leg(current, pickup), _leg(pickup, dropoff)]
+) -> tuple[list[RouteLeg], str]:
+    """Two driving legs (current → pickup → drop-off) plus the routing source.
+
+    Each leg is routed via OSRM; if a leg fails it falls back to a straight-line
+    haversine estimate. The source is "osrm" when every leg routed, else
+    "estimated".
+    """
+    legs: list[RouteLeg] = []
+    source = "osrm"
+    for start, end in ((current, pickup), (pickup, dropoff)):
+        leg = _osrm_leg(start, end)
+        if leg is None:
+            leg = _leg(start, end)
+            source = "estimated"
+        legs.append(leg)
+    return legs, source
