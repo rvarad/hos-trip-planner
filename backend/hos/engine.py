@@ -306,12 +306,17 @@ def _drive_leg(
 def _append_reset(
     segments: list[DutySegment], clock: int, state: DriverState, where: Location
 ) -> int:
-    """Insert a 10-hour off-duty reset; restart the 11h/14h and break clocks."""
+    """Insert the 10-hour reset; restart the 11h/14h and break clocks.
+
+    Logged as sleeper berth (T14): an over-the-road driver takes this overnight
+    rest in the berth. The rule only requires 10 consecutive hours off duty *or*
+    sleeper (§ 395.3(a)(1)), so the clock effect is identical to off-duty.
+    """
     segments.append(
         DutySegment(
             start_min=clock,
             end_min=clock + MIN_RESET_OFF_DUTY_MIN,
-            status=DutyStatus.OFF_DUTY,
+            status=DutyStatus.SLEEPER_BERTH,
             description="10-hour rest",
             start_location=where,
             end_location=where,

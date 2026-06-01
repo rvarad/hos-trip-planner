@@ -18,6 +18,7 @@
 | T11 | Polish                                     | not started |
 | T12 | Deploy                                     | not started |
 | T13 | Loom recording                             | not started |
+| T14 | Log the 10-hour rest as sleeper berth      | done        |
 
 **Suggested order for the location feature:** T2.0/T2.1 + T4 (data shape) →
 T5/T5a (geo stack + map) → T6a (`<MapView>`) → T7 (geocode proxies) → T6b

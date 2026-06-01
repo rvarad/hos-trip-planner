@@ -175,14 +175,12 @@ def test_plan_trip_resets_at_11h_driving_limit():
     trip = TripInput(legs=legs, current_cycle_used_minutes=0, start_time_minutes=480)
     result = plan_trip(trip)
 
-    # Exactly one 10-hour off-duty reset (OFF_DUTY also covers 30-min breaks,
-    # so isolate the reset by its duration).
-    resets = [
-        s
-        for s in result.segments
-        if s.status == DutyStatus.OFF_DUTY and (s.end_min - s.start_min) >= 600
-    ]
+    # Exactly one 10-hour reset, logged as sleeper berth (T14). Off-duty is
+    # reserved for short breaks and the pre/post-trip grid fill, so the reset is
+    # the only sleeper-berth segment.
+    resets = [s for s in result.segments if s.status == DutyStatus.SLEEPER_BERTH]
     assert len(resets) == 1
+    assert resets[0].description == "10-hour rest"
     assert resets[0].end_min - resets[0].start_min == 600
 
     # Driving and miles conserved across the split.
@@ -190,13 +188,13 @@ def test_plan_trip_resets_at_11h_driving_limit():
     assert sum(s.end_min - s.start_min for s in driving) == 780
     assert result.total_miles == 650.0
 
-    # Invariant: within any duty period (between ≥600-min off-duty resets),
+    # Invariant: within any duty period (between sleeper-berth 10h resets),
     # driving never exceeds 11h (660) and the window never exceeds 14h (840).
     drive_in_period = 0
     window = 0
     for s in result.segments:
         dur = s.end_min - s.start_min
-        if s.status == DutyStatus.OFF_DUTY and dur >= 600:
+        if s.status == DutyStatus.SLEEPER_BERTH and dur >= 600:
             drive_in_period = 0
             window = 0
             continue
@@ -224,12 +222,9 @@ def test_plan_trip_inserts_break_after_8h_driving():
     ]
     assert len(breaks) == 1
     assert breaks[0].end_min - breaks[0].start_min == 30
-    # No 10-hour reset was needed (driving stays under 11h within the period).
-    assert not [
-        s
-        for s in result.segments
-        if s.status == DutyStatus.OFF_DUTY and (s.end_min - s.start_min) >= 600
-    ]
+    # No 10-hour reset was needed (driving stays under 11h within the period),
+    # so there is no sleeper-berth segment.
+    assert not [s for s in result.segments if s.status == DutyStatus.SLEEPER_BERTH]
 
     # Invariant: driving-since-break never exceeds 8h (480); any non-driving
     # segment >= 30 min resets it.
