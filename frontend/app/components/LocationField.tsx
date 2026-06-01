@@ -101,6 +101,16 @@ export default function LocationField({
           }
           loading={loading}
           renderInput={(params) => <TextField {...params} label={label} />}
+          renderOption={(props, option) => {
+            // Photon can return several results with the same label, so key on
+            // the coordinates instead of the (non-unique) label.
+            const { key: _key, ...rest } = props;
+            return (
+              <li {...rest} key={`${option.lat},${option.lng}`}>
+                {option.label}
+              </li>
+            );
+          }}
         />
         <Tooltip title="Drop pin">
           <IconButton aria-label="Drop pin" onClick={() => setPinOpen(true)}>

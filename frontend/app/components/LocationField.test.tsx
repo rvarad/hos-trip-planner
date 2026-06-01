@@ -34,6 +34,32 @@ describe("LocationField", () => {
     expect(screen.queryByText("Use my location")).not.toBeInTheDocument();
   });
 
+  it("renders duplicate-labeled options without a duplicate-key warning", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const fetchMock = vi.fn(async () =>
+      okJson({
+        results: [
+          { label: "Springfield", lat: 39.8, lng: -89.6 },
+          { label: "Springfield", lat: 37.2, lng: -93.3 },
+        ],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<LocationField label="Pickup" value={null} onChange={() => {}} />);
+    await userEvent.type(screen.getByRole("combobox"), "spring");
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+
+    // Both same-labeled options render...
+    expect((await screen.findAllByText("Springfield")).length).toBe(2);
+    // ...with no React duplicate-key warning.
+    const dupKeyWarning = errorSpy.mock.calls.find((args) =>
+      String(args[0]).includes("same key"),
+    );
+    expect(dupKeyWarning).toBeUndefined();
+    errorSpy.mockRestore();
+  });
+
   it("debounces search, then resolves the field on select", async () => {
     const fetchMock = vi.fn(async () =>
       okJson({ results: [{ label: "Chicago, IL", lat: 41.8, lng: -87.6 }] }),
