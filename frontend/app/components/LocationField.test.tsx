@@ -2,6 +2,12 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("./MapView", () => ({
+  default: ({ onPinPlaced }: any) => (
+    <button onClick={() => onPinPlaced?.(40, -90)}>place-pin</button>
+  ),
+}));
+
 import LocationField from "./LocationField";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -36,5 +42,27 @@ describe("LocationField", () => {
       lat: 41.8,
       lng: -87.6,
     });
+  });
+
+  it("drops a pin, reverse-geocodes it, and resolves the field", async () => {
+    const fetchMock = vi.fn(async () =>
+      okJson({ result: { label: "Dropped Place", lat: 40, lng: -90 } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const onChange = vi.fn();
+
+    render(<LocationField label="Pickup" value={null} onChange={onChange} />);
+
+    await userEvent.click(screen.getByRole("button", { name: /pin/i }));
+    await userEvent.click(await screen.findByText("place-pin"));
+
+    await waitFor(() =>
+      expect(onChange).toHaveBeenCalledWith({
+        label: "Dropped Place",
+        lat: 40,
+        lng: -90,
+      }),
+    );
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/api/reverse?");
   });
 });

@@ -34,7 +34,7 @@ and `<MapView>` (T6a).
   - Test: typing triggers one debounced `GET /api/geocode` (fake timers); selecting
     a suggestion calls `onChange` with `{ label, lat, lng }`.
 
-- [ ] **T6b.2** Drop-a-pin mode
+- [x] **T6b.2** Drop-a-pin mode
   - A "drop a pin" button opens a `<Dialog>` with `<MapView>` in pick mode; a
     placed pin calls `reverseGeocode` and resolves the field, then closes.
   - Test (MapView mocked): firing `onPinPlaced` calls `GET /api/reverse` and then
