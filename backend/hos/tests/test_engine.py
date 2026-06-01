@@ -144,3 +144,40 @@ def test_plan_trip_walks_legs():
         assert later.start_min == earlier.end_min
     assert result.total_miles == 250.0
     assert result.days == []
+
+
+def test_plan_trip_resets_at_11h_driving_limit():
+    # 13h of driving forces a split: 11h cap is reached, a 10-hour reset is
+    # inserted, then driving resumes.
+    legs = [
+        RouteLeg(start=CHICAGO, end=ST_LOUIS, distance_miles=50.0, duration_minutes=60),
+        RouteLeg(start=ST_LOUIS, end=DALLAS, distance_miles=600.0, duration_minutes=720),
+    ]
+    trip = TripInput(legs=legs, current_cycle_used_minutes=0, start_time_minutes=480)
+    result = plan_trip(trip)
+
+    # Exactly one 10-hour off-duty reset.
+    resets = [s for s in result.segments if s.status == DutyStatus.OFF_DUTY]
+    assert len(resets) == 1
+    assert resets[0].end_min - resets[0].start_min == 600
+
+    # Driving and miles conserved across the split.
+    driving = [s for s in result.segments if s.status == DutyStatus.DRIVING]
+    assert sum(s.end_min - s.start_min for s in driving) == 780
+    assert result.total_miles == 650.0
+
+    # Invariant: within any duty period (between ≥600-min off-duty resets),
+    # driving never exceeds 11h (660) and the window never exceeds 14h (840).
+    drive_in_period = 0
+    window = 0
+    for s in result.segments:
+        dur = s.end_min - s.start_min
+        if s.status == DutyStatus.OFF_DUTY and dur >= 600:
+            drive_in_period = 0
+            window = 0
+            continue
+        if s.status == DutyStatus.DRIVING:
+            drive_in_period += dur
+        window += dur
+        assert drive_in_period <= 660
+        assert window <= 840

@@ -6,7 +6,14 @@ Works in integer minutes-from-trip-start; clock formatting happens at the edges.
 
 from dataclasses import dataclass
 
-from hos.rules import DROPOFF_MIN, PICKUP_MIN, DutyStatus
+from hos.rules import (
+    DROPOFF_MIN,
+    MAX_DRIVING_PER_PERIOD_MIN,
+    MAX_DUTY_WINDOW_MIN,
+    MIN_RESET_OFF_DUTY_MIN,
+    PICKUP_MIN,
+    DutyStatus,
+)
 
 
 @dataclass(frozen=True)
@@ -118,7 +125,9 @@ def plan_trip(inp: TripInput) -> PlanResult:
 
     T3.1: walk the legs, emitting a driving segment per leg plus a 60-minute
     on-duty stop at pickup (after the first leg) and drop-off (after the last).
-    HOS limits, fuel stops, and mid-leg interpolation arrive in later subtasks.
+    T3.2: split driving and insert a 10-hour reset when the 11h driving limit or
+    14h window is reached. Fuel stops, the 30-min break, the cycle cap, and
+    mid-leg interpolation arrive in later subtasks.
     """
     state = DriverState(on_duty_in_cycle=inp.current_cycle_used_minutes)
     segments: list[DutySegment] = []
@@ -127,36 +136,93 @@ def plan_trip(inp: TripInput) -> PlanResult:
     last = len(inp.legs) - 1
 
     for i, leg in enumerate(inp.legs):
+        clock = _drive_leg(leg, state, segments, clock)
+        total_miles += leg.distance_miles
+
+        if i == 0:
+            clock = _append_on_duty_stop(segments, clock, state, leg.end, "Pickup", PICKUP_MIN)
+        if i == last:
+            clock = _append_on_duty_stop(segments, clock, state, leg.end, "Drop-off", DROPOFF_MIN)
+
+    return PlanResult(segments=segments, days=[], total_miles=total_miles)
+
+
+def _drive_leg(
+    leg: RouteLeg, state: DriverState, segments: list[DutySegment], clock: int
+) -> int:
+    """Spend a leg's driving time, splitting for the 11h/14h limits.
+
+    Emits one or more DRIVING segments; inserts a 10-hour reset whenever the
+    driving-per-period or duty-window cap is reached. Returns the advanced clock.
+    """
+    remaining = leg.duration_minutes
+    while remaining > 0:
+        drivable = min(
+            remaining,
+            MAX_DRIVING_PER_PERIOD_MIN - state.driving_in_period,
+            MAX_DUTY_WINDOW_MIN - state.elapsed_in_window,
+        )
+        if drivable <= 0:
+            clock = _append_reset(segments, clock, state, leg.end)
+            continue
+
+        miles = leg.distance_miles * drivable / leg.duration_minutes
         segments.append(
             DutySegment(
                 start_min=clock,
-                end_min=clock + leg.duration_minutes,
+                end_min=clock + drivable,
                 status=DutyStatus.DRIVING,
                 description=f"Drive to {leg.end.label}",
                 start_location=leg.start,
                 end_location=leg.end,
-                miles=leg.distance_miles,
+                miles=miles,
             )
         )
-        clock += leg.duration_minutes
-        total_miles += leg.distance_miles
+        clock += drivable
+        state.driving_in_period += drivable
+        state.elapsed_in_window += drivable
+        state.driving_since_break += drivable
+        state.on_duty_in_cycle += drivable
+        state.miles_since_fuel += miles
+        remaining -= drivable
 
-        if i == 0:
-            clock = _append_on_duty_stop(segments, clock, leg.end, "Pickup", PICKUP_MIN)
-        if i == last:
-            clock = _append_on_duty_stop(segments, clock, leg.end, "Drop-off", DROPOFF_MIN)
+    return clock
 
-    return PlanResult(segments=segments, days=[], total_miles=total_miles)
+
+def _append_reset(
+    segments: list[DutySegment], clock: int, state: DriverState, where: Location
+) -> int:
+    """Insert a 10-hour off-duty reset; restart the 11h/14h and break clocks."""
+    segments.append(
+        DutySegment(
+            start_min=clock,
+            end_min=clock + MIN_RESET_OFF_DUTY_MIN,
+            status=DutyStatus.OFF_DUTY,
+            description="10-hour rest",
+            start_location=where,
+            end_location=where,
+            miles=0.0,
+        )
+    )
+    state.driving_in_period = 0
+    state.elapsed_in_window = 0
+    state.driving_since_break = 0
+    return clock + MIN_RESET_OFF_DUTY_MIN
 
 
 def _append_on_duty_stop(
     segments: list[DutySegment],
     clock: int,
+    state: DriverState,
     where: Location,
     description: str,
     minutes: int,
 ) -> int:
-    """Append an on-duty-not-driving stop of `minutes`; return the advanced clock."""
+    """Append an on-duty-not-driving stop of `minutes`; return the advanced clock.
+
+    On-duty-not-driving time consumes the 14h window (which never pauses) and
+    counts toward the cycle, but does not add to the driving clocks.
+    """
     segments.append(
         DutySegment(
             start_min=clock,
@@ -168,4 +234,6 @@ def _append_on_duty_stop(
             miles=0.0,
         )
     )
+    state.elapsed_in_window += minutes
+    state.on_duty_in_cycle += minutes
     return clock + minutes
