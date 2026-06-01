@@ -4,7 +4,9 @@ import { useEffect, useRef } from "react";
 import Map, {
   Marker,
   NavigationControl,
+  type MapLayerMouseEvent,
   type MapRef,
+  type MarkerDragEvent,
 } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -34,9 +36,16 @@ function markerColor(kind: string): string {
 type MapViewProps = {
   markers?: MapMarker[];
   fitToMarkers?: boolean;
+  pin?: { lat: number; lng: number } | null;
+  onPinPlaced?: (lat: number, lng: number) => void;
 };
 
-export default function MapView({ markers, fitToMarkers = true }: MapViewProps) {
+export default function MapView({
+  markers,
+  fitToMarkers = true,
+  pin,
+  onPinPlaced,
+}: MapViewProps) {
   const mapRef = useRef<MapRef>(null);
 
   useEffect(() => {
@@ -60,8 +69,35 @@ export default function MapView({ markers, fitToMarkers = true }: MapViewProps) 
       initialViewState={{ longitude: -98.5795, latitude: 39.8283, zoom: 3.5 }}
       mapStyle={MAP_STYLE}
       style={{ width: "100%", height: "100%" }}
+      cursor={onPinPlaced ? "crosshair" : undefined}
+      onClick={
+        onPinPlaced
+          ? (e: MapLayerMouseEvent) => onPinPlaced(e.lngLat.lat, e.lngLat.lng)
+          : undefined
+      }
     >
       <NavigationControl position="top-right" />
+      {pin && (
+        <Marker
+          longitude={pin.lng}
+          latitude={pin.lat}
+          draggable={!!onPinPlaced}
+          onDragEnd={(e: MarkerDragEvent) =>
+            onPinPlaced?.(e.lngLat.lat, e.lngLat.lng)
+          }
+        >
+          <div
+            style={{
+              width: 20,
+              height: 20,
+              borderRadius: "50%",
+              background: "#38bdf8",
+              border: "3px solid #fff",
+              boxShadow: "0 0 0 1px rgba(0,0,0,0.5)",
+            }}
+          />
+        </Marker>
+      )}
       {markers?.map((m, i) => (
         <Marker key={i} longitude={m.lng} latitude={m.lat}>
           <div

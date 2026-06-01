@@ -31,7 +31,7 @@ a draggable pin-drop, and frame the view.
   - Test (react-map-gl mocked): rendering with N markers shows N marker elements;
     bare `<MapView />` still renders the map.
 
-- [ ] **T6a.2** Pin-drop / draggable pin
+- [x] **T6a.2** Pin-drop / draggable pin
   - Add `pin` + `onPinPlaced`. In pick mode, a map click fires `onPinPlaced(lat,
     lng)`; the placed `pin` renders as a draggable marker whose `onDragEnd` also
     fires `onPinPlaced`.
