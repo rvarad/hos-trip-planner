@@ -24,7 +24,7 @@ Shared foundation for the pin-picker (T6a/T6b) and the result map (T10).
 
 ## Subtasks
 
-- [ ] **T5a.1** Frontend test infra (Vitest + RTL)
+- [x] **T5a.1** Frontend test infra (Vitest + RTL)
   - Add the dev deps; `vitest.config.ts` (jsdom env, React plugin); a setup file
     wiring `@testing-library/jest-dom`; a `test` script in `package.json`. Add the
     test command to CLAUDE.md.

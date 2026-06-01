@@ -33,6 +33,7 @@ Scope: a focused MVP — favor a clean, working core over breadth.
 - Add a dep: cd backend && uv add <pkg> (ask first)
 - Frontend dev: cd frontend && npm run dev
 - Frontend build: cd frontend && npm run build
+- Frontend tests: cd frontend && npm test
 
 ## Architecture
 
