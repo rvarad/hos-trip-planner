@@ -6,7 +6,9 @@ Status: Accepted
 ## Pure OSS geo stack: MapLibre GL, Photon, OSRM
 
 The geo features use an all open-source stack with no API key or billing account:
-- **MapLibre GL JS** with free vector tiles for map rendering.
+- **MapLibre GL JS** with free vector tiles for map rendering, using a
+  **dark-minimal** basemap style (e.g. CARTO Dark Matter or a Protomaps dark
+  theme) — keyless, with the style URL swappable.
 - **Photon** (Komoot) for geocoding — typed-address autocomplete and reverse
   geocoding of dropped pins.
 - **OSRM** for routing — driving distance, duration, and route geometry.
@@ -15,7 +17,9 @@ The geo features use an all open-source stack with no API key or billing account
 "search or drop a pin" experience is mostly frontend interaction design (debounced
 autocomplete, proximity bias, draggable pin), so an OSS geocoder's data quality is
 sufficient for addresses and well-known places. Avoiding Google/Mapbox keeps the
-deliverable key-free and reproducible.
+deliverable key-free and reproducible. A dark-minimal basemap is chosen for a
+sleek, modern look: the desaturated dark style recedes so the route line and stop
+markers (in bright accent colors) are the visual focus.
 
 ## Public providers now, self-host later
 

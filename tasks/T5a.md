@@ -7,8 +7,9 @@ result map (T10). Depends on the stack chosen in T5.
 ## Subtasks
 
 - [ ] **T5a.1** Add MapLibre GL JS to the frontend
-  - Install the dependency (ask first per protocol); configure a free vector
-    tile style (e.g. OpenFreeMap). No API key required.
+  - Install the dependency (ask first per protocol); configure a keyless
+    **dark-minimal** vector style (e.g. CARTO Dark Matter or a Protomaps dark
+    theme), with the style URL swappable. No API key required.
   - Test: a smoke test / Storybook-style page mounts the map without errors.
 
 - [ ] **T5a.2** Render a basic interactive map
