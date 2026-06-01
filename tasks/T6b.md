@@ -27,7 +27,7 @@ and `<MapView>` (T6a).
 
 ## Subtasks
 
-- [ ] **T6b.1** Geocoding client + autocomplete search
+- [x] **T6b.1** Geocoding client + autocomplete search
   - Add `app/lib/geocoding.ts` (`ResolvedLocation`, `searchLocations`,
     `reverseGeocode`). Build `<LocationField>` with a debounced MUI `<Autocomplete>`
     that lists results and resolves the field on select; show a loading spinner.
