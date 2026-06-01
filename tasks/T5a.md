@@ -18,6 +18,10 @@ Shared foundation for the pin-picker (T6a/T6b) and the result map (T10).
   jsdom, so map components are tested with **react-map-gl mocked** (assert the
   component renders) — the real visual check is `npm run build` + a browser. The
   test infra's real payoff is logic in T6b (debounce/resolution) and T6 (validation).
+- **Theme:** a **dark-only** MUI theme (`palette.mode: "dark"` + an accent color)
+  defined in `app/providers.tsx`, which already wraps the app in `ThemeProvider` +
+  `CssBaseline`. The accent color is the single source of truth for the route line
+  and marker colors (T6a/T10). A light/dark toggle is out of scope (revisit in T11).
 - **Deps to add (approved):** prod `maplibre-gl`, `react-map-gl`; dev `vitest`,
   `@vitejs/plugin-react`, `@testing-library/react`, `@testing-library/jest-dom`,
   `@testing-library/user-event`, `jsdom`.
@@ -39,7 +43,14 @@ Shared foundation for the pin-picker (T6a/T6b) and the result map (T10).
     (T6a later extends this with marker/pin props — same component.)
   - Test (react-map-gl mocked): the component renders its map container.
 
-- [ ] **T5a.3** Render on the page
+- [ ] **T5a.3** Dark MUI theme
+  - In `app/providers.tsx`, replace `createTheme()` with a dark theme
+    (`palette.mode: "dark"` + an accent color used for the route/markers). The
+    existing `CssBaseline` then applies the dark background/text app-wide.
+  - Test: render a probe under `Providers` (or the theme) and assert the theme's
+    `palette.mode === "dark"`.
+
+- [ ] **T5a.4** Render on the page
   - Mount `MapView` full-viewport on the home page (replacing the starter
     boilerplate), dynamically imported with `ssr: false`.
   - Verify: `npm run build` succeeds and the dark map renders/pans in a browser.
