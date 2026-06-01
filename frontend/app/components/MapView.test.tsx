@@ -22,6 +22,15 @@ vi.mock("react-map-gl/maplibre", () => ({
       {children}
     </div>
   ),
+  Source: ({ children, data }: any) => (
+    <div
+      data-testid="source"
+      data-coords={JSON.stringify(data?.geometry?.coordinates)}
+    >
+      {children}
+    </div>
+  ),
+  Layer: ({ id }: any) => <div data-testid={`layer-${id}`} />,
 }));
 
 import MapView from "./MapView";
@@ -57,5 +66,23 @@ describe("MapView", () => {
     render(<MapView pin={{ lat: 1, lng: 2 }} onPinPlaced={onPinPlaced} />);
     fireEvent.click(screen.getByTestId("marker"));
     expect(onPinPlaced).toHaveBeenCalledWith(41, -91);
+  });
+
+  it("draws the route line through the given coordinates", () => {
+    const route: [number, number][] = [
+      [-87.6298, 41.8781],
+      [-96.797, 32.7767],
+    ];
+    render(<MapView route={route} />);
+    expect(screen.getByTestId("layer-route-line")).toBeInTheDocument();
+    expect(screen.getByTestId("source")).toHaveAttribute(
+      "data-coords",
+      JSON.stringify(route),
+    );
+  });
+
+  it("renders no route line when no route is given", () => {
+    render(<MapView />);
+    expect(screen.queryByTestId("source")).not.toBeInTheDocument();
   });
 });

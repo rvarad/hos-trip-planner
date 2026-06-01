@@ -2,8 +2,10 @@
 
 import { useEffect, useRef } from "react";
 import Map, {
+  Layer,
   Marker,
   NavigationControl,
+  Source,
   type MapLayerMouseEvent,
   type MapRef,
   type MarkerDragEvent,
@@ -35,6 +37,8 @@ function markerColor(kind: string): string {
 
 type MapViewProps = {
   markers?: MapMarker[];
+  /** The planned route as ordered [lng, lat] pairs (GeoJSON order). */
+  route?: [number, number][];
   fitToMarkers?: boolean;
   pin?: { lat: number; lng: number } | null;
   onPinPlaced?: (lat: number, lng: number) => void;
@@ -42,6 +46,7 @@ type MapViewProps = {
 
 export default function MapView({
   markers,
+  route,
   fitToMarkers = true,
   pin,
   onPinPlaced,
@@ -77,6 +82,24 @@ export default function MapView({
       }
     >
       <NavigationControl position="top-right" />
+      {route && route.length >= 2 && (
+        <Source
+          id="route"
+          type="geojson"
+          data={{
+            type: "Feature",
+            properties: {},
+            geometry: { type: "LineString", coordinates: route },
+          }}
+        >
+          <Layer
+            id="route-line"
+            type="line"
+            layout={{ "line-join": "round", "line-cap": "round" }}
+            paint={{ "line-color": "#38bdf8", "line-width": 4, "line-opacity": 0.85 }}
+          />
+        </Source>
+      )}
       {pin && (
         <Marker
           longitude={pin.lng}
