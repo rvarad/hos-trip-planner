@@ -28,8 +28,17 @@ class PlanTripView(APIView):
             start_time_minutes=d["start_time_minutes"],
         )
         result = plan_trip(trip)
+        # Stitch the legs' geometries into one polyline ([lng, lat], GeoJSON
+        # order), dropping the duplicated point where one leg meets the next.
+        route: list[list[float]] = []
+        for leg in legs:
+            points = [[lng, lat] for lat, lng in leg.geometry]
+            if route and points and points[0] == route[-1]:
+                points = points[1:]
+            route.extend(points)
         payload = SimpleNamespace(
             routing=routing_source,
+            route=route,
             segments=result.segments,
             days=result.days,
             total_miles=result.total_miles,

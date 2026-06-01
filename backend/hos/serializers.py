@@ -53,6 +53,13 @@ class PlanResultSerializer(serializers.Serializer):
 
 
 class PlanTripResponseSerializer(PlanResultSerializer):
-    """The plan plus the trip-level routing source ("osrm" or "estimated")."""
+    """The plan plus the trip-level routing source and the route polyline.
+
+    `routing` is "osrm" or "estimated"; `route` is the full path as ordered
+    [lng, lat] pairs (GeoJSON order), ready for MapLibre to draw.
+    """
 
     routing = serializers.CharField()
+    route = serializers.ListField(
+        child=serializers.ListField(child=serializers.FloatField(), min_length=2, max_length=2)
+    )

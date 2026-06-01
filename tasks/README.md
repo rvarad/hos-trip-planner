@@ -14,7 +14,7 @@
 | T7  | Next.js server-side proxy routes           | done        |
 | T8  | Log-sheet SVG rendering                    | done        |
 | T9  | Multi-day log slicing at midnight          | done        |
-| T10 | Map display with markers                   | not started |
+| T10 | Map display with route + markers           | in progress |
 | T11 | Polish                                     | not started |
 | T12 | Deploy                                     | not started |
 | T13 | Loom recording                             | not started |
