@@ -9,12 +9,18 @@ import Typography from "@mui/material/Typography";
 
 import LocationField from "./LocationField";
 import MapView, { type MapMarker } from "./MapView";
+import DailyLogSheet, { type DutySegment } from "./DailyLogSheet";
 import { type ResolvedLocation } from "../lib/geocoding";
+
+interface DayLog {
+  date_offset: number;
+  segments: DutySegment[];
+}
 
 interface PlanResult {
   routing: string;
-  segments: { status: string }[];
-  days: unknown[];
+  segments: DutySegment[];
+  days: DayLog[];
   total_miles: number;
 }
 
@@ -142,6 +148,20 @@ export default function TripPlanner() {
           <Typography variant="body2">
             {planResult.total_miles} miles · {planResult.segments.length} segments · {planResult.days.length} days
           </Typography>
+        </Box>
+      )}
+
+      {planResult && planResult.days.length > 0 && (
+        <Box sx={{ px: 2, pb: 2, overflowY: "auto", maxHeight: "40vh" }}>
+          <Typography variant="h6" sx={{ mt: 1, mb: 2 }}>Daily Logs</Typography>
+          {planResult.days.map((day) => (
+            <Box key={day.date_offset} sx={{ mb: 4 }}>
+              <Typography variant="subtitle2" sx={{ mb: 1, color: "text.secondary" }}>
+                Day {day.date_offset + 1}
+              </Typography>
+              <DailyLogSheet segments={day.segments} />
+            </Box>
+          ))}
         </Box>
       )}
 
