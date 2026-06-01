@@ -98,4 +98,33 @@ describe("TripPlanner", () => {
     expect(await screen.findByText(/804\.57/)).toBeInTheDocument();
     expect(await screen.findByText(/approximate/i)).toBeInTheDocument();
   });
+
+  it("offers a Map/Daily Logs toggle and renders log sheets when a plan has days", async () => {
+    const fetchMock = vi.fn(async () =>
+      okJson({
+        routing: "osrm",
+        segments: [{ status: "driving" }],
+        days: [
+          {
+            date_offset: 0,
+            segments: [{ start_min: 480, end_min: 600, status: "driving" }],
+          },
+        ],
+        total_miles: 100,
+        route: [],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TripPlanner />);
+    await resolveAll();
+    await userEvent.click(plan());
+
+    // The toggle appears once there's a plan with days; default view is the map.
+    const logsToggle = await screen.findByRole("button", { name: /daily logs/i });
+    await userEvent.click(logsToggle);
+
+    // Switching to logs renders a DailyLogSheet (its row labels appear).
+    expect((await screen.findAllByText("Driving")).length).toBeGreaterThan(0);
+  });
 });

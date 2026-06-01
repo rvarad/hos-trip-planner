@@ -4,8 +4,13 @@ import { useState } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
+import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 
 import LocationField from "./LocationField";
 import MapView, { type MapMarker } from "./MapView";
@@ -31,6 +36,23 @@ function parseStartTimeMinutes(hhmm: string): number {
   return (h || 0) * 60 + (m || 0);
 }
 
+// Leading dot for a location field: a colored circle (origin/waypoint) or square
+// (destination), matching the map marker palette.
+function FieldDot({ color, square }: { color: string; square?: boolean }) {
+  return (
+    <Box
+      sx={{
+        width: 12,
+        height: 12,
+        flexShrink: 0,
+        borderRadius: square ? "2px" : "50%",
+        bgcolor: color,
+        boxShadow: "0 0 0 2px rgba(0,0,0,0.4)",
+      }}
+    />
+  );
+}
+
 export default function TripPlanner() {
   const [current, setCurrent] = useState<ResolvedLocation | null>(null);
   const [pickup, setPickup] = useState<ResolvedLocation | null>(null);
@@ -41,6 +63,7 @@ export default function TripPlanner() {
   const [planResult, setPlanResult] = useState<PlanResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [view, setView] = useState<"map" | "logs">("map");
 
   const cycleNum = Number(cycleHours);
   const cycleValid = cycleHours !== "" && !isNaN(cycleNum) && cycleNum >= 0 && cycleNum <= 70;
@@ -60,6 +83,8 @@ export default function TripPlanner() {
     ? markersFromSegments(planResult.segments)
     : inputMarkers;
 
+  const hasDays = !!planResult && planResult.days.length > 0;
+
   async function handleSubmit() {
     if (!canPlan || !current || !pickup || !dropoff) return;
 
@@ -74,6 +99,7 @@ export default function TripPlanner() {
     setIsLoading(true);
     setError(null);
     setPlanResult(null);
+    setView("map");
 
     try {
       const res = await fetch("/api/plan-trip", {
@@ -94,87 +120,147 @@ export default function TripPlanner() {
   }
 
   return (
-    <Box
-      sx={{
-        position: "fixed",
-        inset: 0,
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
+    <Box sx={{ position: "fixed", inset: 0, display: "flex" }}>
+      {/* Left command panel */}
       <Box
         sx={{
+          width: { xs: "100%", md: 360 },
+          flexShrink: 0,
+          height: "100%",
+          overflowY: "auto",
+          borderRight: 1,
+          borderColor: "divider",
+          bgcolor: "background.paper",
+          p: 2,
           display: "flex",
-          flexWrap: "wrap",
-          gap: 1.5,
-          p: 1.5,
-          alignItems: "center",
+          flexDirection: "column",
+          gap: 2,
         }}
       >
-        <Box sx={{ flex: "1 1 220px" }}>
-          <LocationField label="Current location" value={current} onChange={setCurrent} />
-        </Box>
-        <Box sx={{ flex: "1 1 220px" }}>
-          <LocationField label="Pickup" value={pickup} onChange={setPickup} />
-        </Box>
-        <Box sx={{ flex: "1 1 220px" }}>
-          <LocationField label="Drop-off" value={dropoff} onChange={setDropoff} />
-        </Box>
-        <TextField
-          label="Cycle hours used"
-          type="number"
-          value={cycleHours}
-          onChange={(e) => setCycleHours(e.target.value)}
-          sx={{ width: 150 }}
-        />
-        <TextField
-          label="Start time"
-          type="time"
-          value={startTime}
-          onChange={(e) => setStartTime(e.target.value)}
-          slotProps={{ inputLabel: { shrink: true } }}
-          sx={{ width: 140 }}
-        />
-        <Button variant="contained" disabled={!canPlan} onClick={handleSubmit}>
+        <Typography
+          variant="h6"
+          sx={{ display: "flex", alignItems: "center", gap: 1, fontWeight: 700 }}
+        >
+          <LocalShippingIcon fontSize="small" color="primary" />
+          HOS Trip Planner
+        </Typography>
+
+        <Stack spacing={2}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <FieldDot color="#38bdf8" />
+            <Box sx={{ flexGrow: 1 }}>
+              <LocationField label="Current location" value={current} onChange={setCurrent} />
+            </Box>
+          </Box>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <FieldDot color="#22c55e" />
+            <Box sx={{ flexGrow: 1 }}>
+              <LocationField label="Pickup" value={pickup} onChange={setPickup} />
+            </Box>
+          </Box>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <FieldDot color="#ef4444" square />
+            <Box sx={{ flexGrow: 1 }}>
+              <LocationField label="Drop-off" value={dropoff} onChange={setDropoff} />
+            </Box>
+          </Box>
+        </Stack>
+
+        <Stack direction="row" spacing={1.5}>
+          <TextField
+            label="Cycle hours used"
+            type="number"
+            value={cycleHours}
+            onChange={(e) => setCycleHours(e.target.value)}
+            sx={{ flex: 1 }}
+          />
+          <TextField
+            label="Start time"
+            type="time"
+            value={startTime}
+            onChange={(e) => setStartTime(e.target.value)}
+            slotProps={{ inputLabel: { shrink: true } }}
+            sx={{ flex: 1 }}
+          />
+        </Stack>
+
+        <Button
+          variant="contained"
+          size="large"
+          fullWidth
+          disabled={!canPlan}
+          onClick={handleSubmit}
+        >
           {isLoading ? "Planning…" : "Plan trip"}
         </Button>
+
+        {error && <Alert severity="error">{error}</Alert>}
+
+        {planResult && (
+          <Paper variant="outlined" sx={{ p: 1.5 }}>
+            {planResult.routing === "estimated" && (
+              <Alert severity="info" sx={{ mb: 1 }}>
+                Distances are approximate (estimated routing).
+              </Alert>
+            )}
+            <Typography variant="body2">
+              {planResult.total_miles.toFixed(2)} miles · {planResult.segments.length} segments ·{" "}
+              {planResult.days.length} days
+            </Typography>
+          </Paper>
+        )}
       </Box>
 
-      {error && (
-        <Alert severity="error" sx={{ mx: 1.5 }}>
-          {error}
-        </Alert>
-      )}
+      {/* Right pane: hero map, with a Map/Logs toggle once a plan has days */}
+      <Box sx={{ flex: 1, position: "relative", minWidth: 0 }}>
+        {hasDays && (
+          <ToggleButtonGroup
+            value={view}
+            exclusive
+            size="small"
+            onChange={(_, v) => v && setView(v)}
+            sx={{
+              position: "absolute",
+              top: 12,
+              right: 12,
+              zIndex: 2,
+              bgcolor: "background.paper",
+              boxShadow: 3,
+            }}
+          >
+            <ToggleButton value="map">Map</ToggleButton>
+            <ToggleButton value="logs">Daily Logs</ToggleButton>
+          </ToggleButtonGroup>
+        )}
 
-      {planResult && (
-        <Box sx={{ px: 2, py: 1 }}>
-          {planResult.routing === "estimated" && (
-            <Alert severity="info" sx={{ mb: 1 }}>
-              Distances are approximate (estimated routing).
-            </Alert>
-          )}
-          <Typography variant="body2">
-            {planResult.total_miles.toFixed(2)} miles · {planResult.segments.length} segments · {planResult.days.length} days
-          </Typography>
-        </Box>
-      )}
-
-      {planResult && planResult.days.length > 0 && (
-        <Box sx={{ px: 2, pb: 2, overflowY: "auto", maxHeight: "40vh" }}>
-          <Typography variant="h6" sx={{ mt: 1, mb: 2 }}>Daily Logs</Typography>
-          {planResult.days.map((day) => (
-            <Box key={day.date_offset} sx={{ mb: 4 }}>
-              <Typography variant="subtitle2" sx={{ mb: 1, color: "text.secondary" }}>
-                Day {day.date_offset + 1}
-              </Typography>
-              <DailyLogSheet segments={day.segments} />
-            </Box>
-          ))}
-        </Box>
-      )}
-
-      <Box sx={{ flex: 1, position: "relative" }}>
         <MapView markers={mapMarkers} route={planResult?.route} />
+
+        {view === "logs" && planResult && (
+          <Box
+            sx={{
+              position: "absolute",
+              inset: 0,
+              overflowY: "auto",
+              p: 3,
+              bgcolor: "#0b0f14",
+            }}
+          >
+            <Typography variant="h6" sx={{ mb: 2 }}>
+              Daily Logs
+            </Typography>
+            {planResult.days.map((day) => (
+              <Paper
+                key={day.date_offset}
+                sx={{ bgcolor: "#fff", p: 2, mb: 3, maxWidth: 900, mx: "auto" }}
+              >
+                <Typography variant="subtitle2" sx={{ color: "#555", mb: 1 }}>
+                  Day {day.date_offset + 1}
+                </Typography>
+                <DailyLogSheet segments={day.segments} />
+              </Paper>
+            ))}
+          </Box>
+        )}
       </Box>
     </Box>
   );
