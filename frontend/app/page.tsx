@@ -2,12 +2,10 @@
 
 import dynamic from "next/dynamic";
 
-const MapView = dynamic(() => import("./components/MapView"), { ssr: false });
+const TripPlanner = dynamic(() => import("./components/TripPlanner"), {
+  ssr: false,
+});
 
 export default function Home() {
-  return (
-    <main style={{ position: "fixed", inset: 0 }}>
-      <MapView />
-    </main>
-  );
+  return <TripPlanner />;
 }
