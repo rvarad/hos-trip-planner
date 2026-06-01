@@ -2,51 +2,116 @@ import pytest
 
 from hos.engine import (
     DayLog,
+    DriverState,
+    DutySegment,
     Location,
     PlanResult,
-    Segment,
+    RouteLeg,
     TripInput,
     plan_trip,
 )
+from hos.rules import DutyStatus
+
+CHICAGO = Location(label="Chicago, IL", lat=41.8781, lng=-87.6298)
+ST_LOUIS = Location(label="St. Louis, MO", lat=38.6270, lng=-90.1994)
+DALLAS = Location(label="Dallas, TX", lat=32.7767, lng=-96.7970)
+
+
+def _sample_legs():
+    return [
+        RouteLeg(start=CHICAGO, end=ST_LOUIS, distance_miles=297.0, duration_minutes=270),
+        RouteLeg(start=ST_LOUIS, end=DALLAS, distance_miles=630.0, duration_minutes=570),
+    ]
 
 
 def test_location_fields_accessible():
-    loc = Location(label="Chicago, IL", lat=41.8781, lng=-87.6298)
-    assert loc.label == "Chicago, IL"
-    assert loc.lat == 41.8781
-    assert loc.lng == -87.6298
+    assert CHICAGO.label == "Chicago, IL"
+    assert CHICAGO.lat == 41.8781
+    assert CHICAGO.lng == -87.6298
+
+
+def test_route_leg_fields_accessible():
+    leg = RouteLeg(
+        start=CHICAGO,
+        end=ST_LOUIS,
+        distance_miles=297.0,
+        duration_minutes=270,
+        geometry=((41.8781, -87.6298), (38.6270, -90.1994)),
+    )
+    assert leg.start.label == "Chicago, IL"
+    assert leg.end.label == "St. Louis, MO"
+    assert leg.distance_miles == 297.0
+    assert leg.duration_minutes == 270
+    assert leg.geometry[0] == (41.8781, -87.6298)
+
+
+def test_route_leg_geometry_defaults_empty():
+    leg = RouteLeg(start=CHICAGO, end=ST_LOUIS, distance_miles=297.0, duration_minutes=270)
+    assert leg.geometry == ()
 
 
 def test_trip_input_fields_accessible():
-    current = Location(label="Chicago, IL", lat=41.8781, lng=-87.6298)
-    pickup = Location(label="St. Louis, MO", lat=38.6270, lng=-90.1994)
-    dropoff = Location(label="Dallas, TX", lat=32.7767, lng=-96.7970)
     trip = TripInput(
-        current_location=current,
-        pickup=pickup,
-        dropoff=dropoff,
-        cycle_hours_used=12.5,
+        legs=_sample_legs(),
+        current_cycle_used_minutes=750,
         start_time_minutes=480,
     )
-    assert trip.current_location.label == "Chicago, IL"
-    assert trip.pickup.lat == 38.6270
-    assert trip.dropoff.lng == -96.7970
-    assert trip.cycle_hours_used == 12.5
+    assert len(trip.legs) == 2
+    assert trip.legs[0].start.label == "Chicago, IL"
+    assert trip.legs[1].end.label == "Dallas, TX"
+    assert trip.current_cycle_used_minutes == 750
     assert trip.start_time_minutes == 480
 
 
-def test_segment_fields_accessible():
-    seg = Segment(kind="driving", start=0, duration=240)
-    assert seg.kind == "driving"
-    assert seg.start == 0
-    assert seg.duration == 240
+def test_driver_state_defaults_zero():
+    state = DriverState()
+    assert state.driving_since_break == 0
+    assert state.driving_in_period == 0
+    assert state.elapsed_in_window == 0
+    assert state.on_duty_in_cycle == 0
+    assert state.miles_since_fuel == 0.0
+
+
+def test_driver_state_is_mutable():
+    state = DriverState()
+    state.driving_in_period += 60
+    state.miles_since_fuel += 55.0
+    assert state.driving_in_period == 60
+    assert state.miles_since_fuel == 55.0
+
+
+def test_duty_segment_fields_accessible():
+    seg = DutySegment(
+        start_min=0,
+        end_min=270,
+        status=DutyStatus.DRIVING,
+        description="Drive to pickup",
+        start_location=CHICAGO,
+        end_location=ST_LOUIS,
+        miles=297.0,
+    )
+    assert seg.start_min == 0
+    assert seg.end_min == 270
+    assert seg.status == DutyStatus.DRIVING
+    assert seg.description == "Drive to pickup"
+    assert seg.start_location.label == "Chicago, IL"
+    assert seg.end_location.label == "St. Louis, MO"
+    assert seg.miles == 297.0
 
 
 def test_day_log_fields_accessible():
-    seg = Segment(kind="driving", start=0, duration=240)
+    seg = DutySegment(
+        start_min=0,
+        end_min=270,
+        status=DutyStatus.DRIVING,
+        description="Drive to pickup",
+        start_location=CHICAGO,
+        end_location=ST_LOUIS,
+        miles=297.0,
+    )
     day = DayLog(date_offset=0, segments=[seg])
     assert day.date_offset == 0
-    assert day.segments[0].kind == "driving"
+    assert day.segments[0].status == DutyStatus.DRIVING
 
 
 def test_plan_result_fields_accessible():
@@ -58,10 +123,8 @@ def test_plan_result_fields_accessible():
 
 def test_plan_trip_not_implemented():
     trip = TripInput(
-        current_location=Location(label="Chicago, IL", lat=41.8781, lng=-87.6298),
-        pickup=Location(label="St. Louis, MO", lat=38.6270, lng=-90.1994),
-        dropoff=Location(label="Dallas, TX", lat=32.7767, lng=-96.7970),
-        cycle_hours_used=12.5,
+        legs=_sample_legs(),
+        current_cycle_used_minutes=750,
         start_time_minutes=480,
     )
     with pytest.raises(NotImplementedError):
