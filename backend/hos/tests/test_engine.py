@@ -7,6 +7,7 @@ from hos.engine import (
     RouteLeg,
     TripInput,
     plan_trip,
+    rolling_cycle_minutes,
 )
 from hos.rules import DutyStatus
 
@@ -315,3 +316,17 @@ def test_mid_leg_stop_has_interpolated_location():
     # Trip endpoints keep full fidelity (not interpolated).
     first_drive = next(s for s in result.segments if s.status == DutyStatus.DRIVING)
     assert first_drive.start_location == CHICAGO
+
+
+def test_rolling_cycle_matches_fmcsa_8day_table():
+    # FMCSA Interstate Truck Driver's Guide, "70-hour/8-day rule: Calculating the
+    # rolling 8-day total" (p.11). Daily on-duty hours converted to minutes.
+    daily = [int(h * 60) for h in [0, 10, 8.5, 12.5, 9, 10, 12, 5, 6, 0]]
+
+    # Published rolling 8-day totals at each window end.
+    assert rolling_cycle_minutes(daily, 7) == 67 * 60  # Days 1-8
+    assert rolling_cycle_minutes(daily, 8) == 73 * 60  # Days 2-9
+    assert rolling_cycle_minutes(daily, 9) == 63 * 60  # Days 3-10
+
+    # Before a full window has elapsed, only the days so far are counted.
+    assert rolling_cycle_minutes(daily, 0) == 0

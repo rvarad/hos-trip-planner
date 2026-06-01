@@ -7,6 +7,7 @@ Works in integer minutes-from-trip-start; clock formatting happens at the edges.
 from dataclasses import dataclass
 
 from hos.rules import (
+    CYCLE_DAYS,
     DRIVING_BEFORE_BREAK_MIN,
     DROPOFF_MIN,
     FUEL_INTERVAL_MILES,
@@ -151,6 +152,24 @@ def plan_trip(inp: TripInput) -> PlanResult:
             clock = _append_on_duty_stop(segments, clock, state, leg.end, "Drop-off", DROPOFF_MIN)
 
     return PlanResult(segments=segments, days=[], total_miles=total_miles)
+
+
+def rolling_cycle_minutes(
+    daily_on_duty_minutes: list[int], day_index: int, cycle_days: int = CYCLE_DAYS
+) -> int:
+    """On-duty minutes over the rolling cycle window ending at `day_index`.
+
+    Implements the § 395.3(b) rolling 70-hour/8-day total: the sum of on-duty
+    time over the current day and the preceding `cycle_days - 1` days, with older
+    days dropping off. `day_index` is 0-based into `daily_on_duty_minutes`.
+
+    Standalone and validated against the FMCSA guide's worked table (T3.7). It is
+    the canonical building block for multi-day cycle accounting; `plan_trip`
+    enforces the cap via the seeded `on_duty_in_cycle` accumulator and 34-hour
+    restart, since a single planned trip is short enough that days don't roll off.
+    """
+    start = max(0, day_index - cycle_days + 1)
+    return sum(daily_on_duty_minutes[start : day_index + 1])
 
 
 def _point_in_leg(leg: RouteLeg, minutes_done: int) -> Location:
