@@ -50,7 +50,7 @@ Shared foundation for the pin-picker (T6a/T6b) and the result map (T10).
   - Test: render a probe under `Providers` (or the theme) and assert the theme's
     `palette.mode === "dark"`.
 
-- [ ] **T5a.4** Render on the page
+- [x] **T5a.4** Render on the page
   - Mount `MapView` full-viewport on the home page (replacing the starter
     boilerplate), dynamically imported with `ssr: false`.
   - Verify: `npm run build` succeeds and the dark map renders/pans in a browser.
