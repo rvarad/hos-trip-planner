@@ -11,7 +11,7 @@
 | T6  | Next.js MUI input form                      | not started |
 | T6a | Reusable `<MapView>` component              | done        |
 | T6b | `<LocationField>` (search or drop a pin)    | not started |
-| T7  | Next.js server-side proxy routes            | in progress |
+| T7  | Next.js server-side proxy routes            | done        |
 | T8  | Log-sheet SVG rendering                     | not started |
 | T9  | Multi-day log slicing at midnight           | not started |
 | T10 | Map display with markers                    | not started |
