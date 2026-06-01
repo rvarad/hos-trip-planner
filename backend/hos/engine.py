@@ -127,6 +127,45 @@ class PlanResult:
     total_miles: float
 
 
+def slice_days(
+    segments: list[DutySegment], start_time_minutes: int
+) -> list[DayLog]:
+    """Slice the flat timeline into per-calendar-day logs, splitting at midnight.
+
+    Segment times are minutes-from-trip-start; `start_time_minutes` anchors them to
+    the wall clock. Each returned `DutySegment` carries day-local minute-of-day
+    times (0–1440) with miles apportioned by the piece's duration; segments crossing
+    a midnight are split across days. Ordered by `date_offset` (0 = first day).
+    """
+    by_day: dict[int, list[DutySegment]] = {}
+    for seg in segments:
+        seg_duration = seg.end_min - seg.start_min
+        if seg_duration <= 0:
+            continue
+        absolute_start = start_time_minutes + seg.start_min
+        absolute_end = start_time_minutes + seg.end_min
+        cursor = absolute_start
+        day = cursor // 1440
+        while cursor < absolute_end:
+            day_start = day * 1440
+            piece_end = min(absolute_end, day_start + 1440)
+            by_day.setdefault(day, []).append(
+                DutySegment(
+                    start_min=cursor - day_start,
+                    end_min=piece_end - day_start,
+                    status=seg.status,
+                    description=seg.description,
+                    start_location=seg.start_location,
+                    end_location=seg.end_location,
+                    miles=seg.miles * (piece_end - cursor) / seg_duration,
+                )
+            )
+            cursor = piece_end
+            day += 1
+
+    return [DayLog(date_offset=d, segments=by_day[d]) for d in sorted(by_day)]
+
+
 def plan_trip(inp: TripInput) -> PlanResult:
     """Build an HOS-compliant timeline for the trip. Engine entry point.
 

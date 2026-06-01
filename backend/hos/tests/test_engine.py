@@ -8,8 +8,23 @@ from hos.engine import (
     TripInput,
     plan_trip,
     rolling_cycle_minutes,
+    slice_days,
 )
 from hos.rules import DutyStatus
+
+_LOC = Location(label="X", lat=1.0, lng=2.0)
+
+
+def _seg(start, end, status=DutyStatus.DRIVING, miles=0.0):
+    return DutySegment(
+        start_min=start,
+        end_min=end,
+        status=status,
+        description="seg",
+        start_location=_LOC,
+        end_location=_LOC,
+        miles=miles,
+    )
 
 CHICAGO = Location(label="Chicago, IL", lat=41.8781, lng=-87.6298)
 ST_LOUIS = Location(label="St. Louis, MO", lat=38.6270, lng=-90.1994)
@@ -330,3 +345,32 @@ def test_rolling_cycle_matches_fmcsa_8day_table():
 
     # Before a full window has elapsed, only the days so far are counted.
     assert rolling_cycle_minutes(daily, 0) == 0
+
+
+def test_slice_days_single_day():
+    # An 8am start; a 0-120 min driving segment lands at 08:00-10:00 on day 0.
+    days = slice_days([_seg(0, 120)], start_time_minutes=480)
+    assert len(days) == 1
+    assert days[0].date_offset == 0
+    assert days[0].segments[0].start_min == 480
+    assert days[0].segments[0].end_min == 600
+
+
+def test_slice_days_splits_at_midnight():
+    # 8am start; trip-minutes 900-1100 is absolute 1380-1580, crossing midnight.
+    days = slice_days([_seg(900, 1100, status=DutyStatus.OFF_DUTY)], start_time_minutes=480)
+    assert [d.date_offset for d in days] == [0, 1]
+    assert days[0].segments[-1].end_min == 1440
+    assert days[1].segments[0].start_min == 0
+    assert days[1].segments[0].end_min == 140
+
+
+def test_slice_days_conserves_duration_and_miles():
+    # A long segment spanning more than one day.
+    days = slice_days([_seg(0, 2000, miles=100.0)], start_time_minutes=600)
+    total_minutes = sum(s.end_min - s.start_min for d in days for s in d.segments)
+    total_miles = sum(s.miles for d in days for s in d.segments)
+    assert total_minutes == 2000
+    assert abs(total_miles - 100.0) < 1e-9
+    # Every day-local time stays within a calendar day.
+    assert all(0 <= s.start_min < s.end_min <= 1440 for d in days for s in d.segments)
