@@ -35,7 +35,7 @@ Shared foundation for the pin-picker (T6a/T6b) and the result map (T10).
   - Test: a trivial smoke test (e.g. a tiny pure helper, or `render`-ing a static
     element) passes under `npm test`.
 
-- [ ] **T5a.2** `MapView` component (dark base map)
+- [x] **T5a.2** `MapView` component (dark base map)
   - Add `maplibre-gl` + `react-map-gl`. Create a client component
     `app/components/MapView.tsx`: a `react-map-gl/maplibre` `<Map>` with the CARTO
     Dark Matter style (from `NEXT_PUBLIC_MAP_STYLE_URL`, with a default), an initial
