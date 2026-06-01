@@ -154,7 +154,7 @@ export default function TripPlanner() {
             </Alert>
           )}
           <Typography variant="body2">
-            {planResult.total_miles} miles · {planResult.segments.length} segments · {planResult.days.length} days
+            {planResult.total_miles.toFixed(2)} miles · {planResult.segments.length} segments · {planResult.days.length} days
           </Typography>
         </Box>
       )}

@@ -72,7 +72,8 @@ describe("TripPlanner", () => {
         routing: "estimated",
         segments: [{ status: "driving" }, { status: "on_duty_not_driving" }],
         days: [],
-        total_miles: 804,
+        total_miles: 804.567,
+        route: [],
       }),
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -94,7 +95,7 @@ describe("TripPlanner", () => {
     expect(body.cycle_hours_used).toBe(0);
     expect(body.start_time_minutes).toBe(480);
 
-    expect(await screen.findByText(/804/)).toBeInTheDocument();
+    expect(await screen.findByText(/804\.57/)).toBeInTheDocument();
     expect(await screen.findByText(/approximate/i)).toBeInTheDocument();
   });
 });
