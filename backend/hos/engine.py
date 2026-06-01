@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from hos.rules import (
     DRIVING_BEFORE_BREAK_MIN,
     DROPOFF_MIN,
+    FUEL_INTERVAL_MILES,
+    FUEL_STOP_MIN,
     MAX_DRIVING_PER_PERIOD_MIN,
     MAX_DUTY_WINDOW_MIN,
     MIN_BREAK_MIN,
@@ -158,24 +160,40 @@ def _drive_leg(
     driving-per-period or duty-window cap is reached. Returns the advanced clock.
     """
     remaining = leg.duration_minutes
+    speed = leg.distance_miles / leg.duration_minutes if leg.duration_minutes else 0.0
     while remaining > 0:
+        minutes_to_fuel = (
+            (FUEL_INTERVAL_MILES - state.miles_since_fuel) / speed
+            if speed > 0
+            else float("inf")
+        )
+
+        # Remedy priority: a 10-hour reset (period/window exhausted) outranks a
+        # fuel stop, which outranks a 30-min break — a fuel stop is non-driving
+        # >= 30 min, so it satisfies the break and avoids a redundant one.
+        if (
+            state.driving_in_period >= MAX_DRIVING_PER_PERIOD_MIN
+            or state.elapsed_in_window >= MAX_DUTY_WINDOW_MIN
+        ):
+            clock = _append_reset(segments, clock, state, leg.end)
+            continue
+        if minutes_to_fuel < 1:
+            clock = _append_fuel_stop(segments, clock, state, leg.end)
+            continue
+        if state.driving_since_break >= DRIVING_BEFORE_BREAK_MIN:
+            clock = _append_break(segments, clock, state, leg.end)
+            continue
+
+        # Drive the largest chunk allowed by every cap, stopping at the next
+        # 1,000-mile boundary.
         drivable = min(
             remaining,
             MAX_DRIVING_PER_PERIOD_MIN - state.driving_in_period,
             MAX_DUTY_WINDOW_MIN - state.elapsed_in_window,
             DRIVING_BEFORE_BREAK_MIN - state.driving_since_break,
         )
-        if drivable <= 0:
-            # A 10-hour reset takes priority (it ends the period and also clears
-            # the break clock); otherwise the 8h driving cap means a 30-min break.
-            if (
-                state.driving_in_period >= MAX_DRIVING_PER_PERIOD_MIN
-                or state.elapsed_in_window >= MAX_DUTY_WINDOW_MIN
-            ):
-                clock = _append_reset(segments, clock, state, leg.end)
-            else:
-                clock = _append_break(segments, clock, state, leg.end)
-            continue
+        if minutes_to_fuel != float("inf"):
+            drivable = min(drivable, max(1, int(minutes_to_fuel)))
 
         miles = leg.distance_miles * drivable / leg.duration_minutes
         segments.append(
@@ -243,6 +261,19 @@ def _append_break(
     state.elapsed_in_window += MIN_BREAK_MIN
     state.driving_since_break = 0
     return clock + MIN_BREAK_MIN
+
+
+def _append_fuel_stop(
+    segments: list[DutySegment], clock: int, state: DriverState, where: Location
+) -> int:
+    """Insert an on-duty fuel stop; reset the mileage-to-fuel counter.
+
+    A fuel stop is on-duty-not-driving and >= the 30-min break, so it also
+    consumes the window, counts toward the cycle, and satisfies the break.
+    """
+    clock = _append_on_duty_stop(segments, clock, state, where, "Fuel stop", FUEL_STOP_MIN)
+    state.miles_since_fuel = 0.0
+    return clock
 
 
 def _append_on_duty_stop(

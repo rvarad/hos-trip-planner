@@ -237,3 +237,36 @@ def test_stop_satisfies_break():
 
     # No off-duty segments at all: no break, no reset.
     assert not [s for s in result.segments if s.status == DutyStatus.OFF_DUTY]
+
+
+def test_fuel_stop_every_1000_miles():
+    # 1,500 miles crosses the 1,000-mile boundary exactly once.
+    legs = [
+        RouteLeg(start=CHICAGO, end=ST_LOUIS, distance_miles=50.0, duration_minutes=30),
+        RouteLeg(start=ST_LOUIS, end=DALLAS, distance_miles=1450.0, duration_minutes=300),
+    ]
+    trip = TripInput(legs=legs, current_cycle_used_minutes=0, start_time_minutes=480)
+    result = plan_trip(trip)
+
+    fuel_stops = [s for s in result.segments if s.description == "Fuel stop"]
+    assert len(fuel_stops) == 1
+    assert fuel_stops[0].status == DutyStatus.ON_DUTY_NOT_DRIVING
+    assert fuel_stops[0].end_min - fuel_stops[0].start_min == 30
+    assert result.total_miles == 1500.0
+
+
+def test_fuel_stop_satisfies_break():
+    # The fuel stop falls at 300 min of driving, with another 300 min after.
+    # Total continuous driving is 600 min (> 8h), so a dedicated break would be
+    # required UNLESS the fuel stop reset the break clock.
+    legs = [
+        RouteLeg(start=CHICAGO, end=ST_LOUIS, distance_miles=30.0, duration_minutes=30),
+        RouteLeg(start=ST_LOUIS, end=DALLAS, distance_miles=1940.0, duration_minutes=600),
+    ]
+    trip = TripInput(legs=legs, current_cycle_used_minutes=0, start_time_minutes=480)
+    result = plan_trip(trip)
+
+    assert len([s for s in result.segments if s.description == "Fuel stop"]) == 1
+    # No off-duty segments: the fuel stop satisfied the break, and the period
+    # never exhausted, so neither a break nor a reset was inserted.
+    assert not [s for s in result.segments if s.status == DutyStatus.OFF_DUTY]
