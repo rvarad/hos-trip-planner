@@ -159,7 +159,10 @@ def test_plan_trip_walks_legs():
     for earlier, later in zip(result.segments, result.segments[1:]):
         assert later.start_min == earlier.end_min
     assert result.total_miles == 250.0
-    assert result.days == []
+    # The whole short trip fits in day 0; driving starts at the 08:00 default.
+    assert len(result.days) == 1
+    assert result.days[0].date_offset == 0
+    assert result.days[0].segments[0].start_min == 480
 
 
 def test_plan_trip_resets_at_11h_driving_limit():
@@ -345,6 +348,24 @@ def test_rolling_cycle_matches_fmcsa_8day_table():
 
     # Before a full window has elapsed, only the days so far are counted.
     assert rolling_cycle_minutes(daily, 0) == 0
+
+
+def test_plan_trip_populates_days():
+    # ~1530-min timeline (with a 10-hour reset) crosses midnight from an 8am start.
+    legs = [
+        RouteLeg(start=CHICAGO, end=ST_LOUIS, distance_miles=50.0, duration_minutes=60),
+        RouteLeg(start=ST_LOUIS, end=DALLAS, distance_miles=600.0, duration_minutes=720),
+    ]
+    trip = TripInput(legs=legs, current_cycle_used_minutes=0, start_time_minutes=480)
+    result = plan_trip(trip)
+
+    assert len(result.days) >= 2
+    assert [d.date_offset for d in result.days] == list(range(len(result.days)))
+    assert all(
+        0 <= s.start_min < s.end_min <= 1440
+        for d in result.days
+        for s in d.segments
+    )
 
 
 def test_slice_days_single_day():

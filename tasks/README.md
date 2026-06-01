@@ -13,7 +13,7 @@
 | T6b | `<LocationField>` (search or drop a pin)   | done        |
 | T7  | Next.js server-side proxy routes           | done        |
 | T8  | Log-sheet SVG rendering                    | done        |
-| T9  | Multi-day log slicing at midnight          | in progress |
+| T9  | Multi-day log slicing at midnight          | done        |
 | T10 | Map display with markers                   | not started |
 | T11 | Polish                                     | not started |
 | T12 | Deploy                                     | not started |

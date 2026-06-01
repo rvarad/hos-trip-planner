@@ -190,7 +190,8 @@ def plan_trip(inp: TripInput) -> PlanResult:
         if i == last:
             clock = _append_on_duty_stop(segments, clock, state, leg.end, "Drop-off", DROPOFF_MIN)
 
-    return PlanResult(segments=segments, days=[], total_miles=total_miles)
+    days = slice_days(segments, inp.start_time_minutes)
+    return PlanResult(segments=segments, days=days, total_miles=total_miles)
 
 
 def rolling_cycle_minutes(
