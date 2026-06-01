@@ -270,3 +270,27 @@ def test_fuel_stop_satisfies_break():
     # No off-duty segments: the fuel stop satisfied the break, and the period
     # never exhausted, so neither a break nor a reset was inserted.
     assert not [s for s in result.segments if s.status == DutyStatus.OFF_DUTY]
+
+
+def test_cycle_cap_inserts_34h_restart():
+    # Seeded at 69h, only 60 min of on-duty remains before the 70h cap, forcing
+    # a 34-hour restart partway through the trip.
+    legs = [
+        RouteLeg(start=CHICAGO, end=ST_LOUIS, distance_miles=100.0, duration_minutes=120),
+        RouteLeg(start=ST_LOUIS, end=DALLAS, distance_miles=150.0, duration_minutes=180),
+    ]
+    trip = TripInput(legs=legs, current_cycle_used_minutes=69 * 60, start_time_minutes=480)
+    result = plan_trip(trip)
+
+    restarts = [
+        s
+        for s in result.segments
+        if s.status == DutyStatus.OFF_DUTY and (s.end_min - s.start_min) == 2040
+    ]
+    assert len(restarts) == 1
+    # Driving resumes after the restart.
+    restart_end = restarts[0].end_min
+    assert any(
+        s.status == DutyStatus.DRIVING and s.start_min >= restart_end
+        for s in result.segments
+    )

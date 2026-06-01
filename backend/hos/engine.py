@@ -11,11 +11,13 @@ from hos.rules import (
     DROPOFF_MIN,
     FUEL_INTERVAL_MILES,
     FUEL_STOP_MIN,
+    MAX_CYCLE_ON_DUTY_MIN,
     MAX_DRIVING_PER_PERIOD_MIN,
     MAX_DUTY_WINDOW_MIN,
     MIN_BREAK_MIN,
     MIN_RESET_OFF_DUTY_MIN,
     PICKUP_MIN,
+    RESTART_OFF_DUTY_MIN,
     DutyStatus,
 )
 
@@ -168,9 +170,13 @@ def _drive_leg(
             else float("inf")
         )
 
-        # Remedy priority: a 10-hour reset (period/window exhausted) outranks a
-        # fuel stop, which outranks a 30-min break — a fuel stop is non-driving
-        # >= 30 min, so it satisfies the break and avoids a redundant one.
+        # Remedy priority: a 34-hour restart (cycle exhausted) outranks a 10-hour
+        # reset, which outranks a fuel stop, which outranks a 30-min break. A
+        # restart is >= 10h off duty so it also clears the period/window/break; a
+        # fuel stop is non-driving >= 30 min so it satisfies the break.
+        if state.on_duty_in_cycle >= MAX_CYCLE_ON_DUTY_MIN:
+            clock = _append_restart(segments, clock, state, leg.end)
+            continue
         if (
             state.driving_in_period >= MAX_DRIVING_PER_PERIOD_MIN
             or state.elapsed_in_window >= MAX_DUTY_WINDOW_MIN
@@ -191,6 +197,7 @@ def _drive_leg(
             MAX_DRIVING_PER_PERIOD_MIN - state.driving_in_period,
             MAX_DUTY_WINDOW_MIN - state.elapsed_in_window,
             DRIVING_BEFORE_BREAK_MIN - state.driving_since_break,
+            MAX_CYCLE_ON_DUTY_MIN - state.on_duty_in_cycle,
         )
         if minutes_to_fuel != float("inf"):
             drivable = min(drivable, max(1, int(minutes_to_fuel)))
@@ -237,6 +244,32 @@ def _append_reset(
     state.elapsed_in_window = 0
     state.driving_since_break = 0
     return clock + MIN_RESET_OFF_DUTY_MIN
+
+
+def _append_restart(
+    segments: list[DutySegment], clock: int, state: DriverState, where: Location
+) -> int:
+    """Insert a 34-hour off-duty restart; reset the cycle and all daily clocks.
+
+    Being >= 10h off duty, the restart also clears the 11h/14h and break clocks.
+    Mileage-to-fuel is unaffected.
+    """
+    segments.append(
+        DutySegment(
+            start_min=clock,
+            end_min=clock + RESTART_OFF_DUTY_MIN,
+            status=DutyStatus.OFF_DUTY,
+            description="34-hour restart",
+            start_location=where,
+            end_location=where,
+            miles=0.0,
+        )
+    )
+    state.on_duty_in_cycle = 0
+    state.driving_in_period = 0
+    state.elapsed_in_window = 0
+    state.driving_since_break = 0
+    return clock + RESTART_OFF_DUTY_MIN
 
 
 def _append_break(
