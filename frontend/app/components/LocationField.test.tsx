@@ -60,6 +60,14 @@ describe("LocationField", () => {
     errorSpy.mockRestore();
   });
 
+  it("does not open the dropdown before the user types", async () => {
+    render(<LocationField label="Pickup" value={null} onChange={() => {}} />);
+    await userEvent.click(screen.getByRole("combobox"));
+    // With empty input and no options, no dropdown / "No options" should show.
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+    expect(screen.queryByText(/no options/i)).not.toBeInTheDocument();
+  });
+
   it("debounces search, then resolves the field on select", async () => {
     const fetchMock = vi.fn(async () =>
       okJson({ results: [{ label: "Chicago, IL", lat: 41.8, lng: -87.6 }] }),

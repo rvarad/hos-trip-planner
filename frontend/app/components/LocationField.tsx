@@ -37,6 +37,7 @@ export default function LocationField({
   const [input, setInput] = useState("");
   const [options, setOptions] = useState<ResolvedLocation[]>([]);
   const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
   const latestRequest = useRef(0);
 
   const [pinOpen, setPinOpen] = useState(false);
@@ -90,6 +91,11 @@ export default function LocationField({
           sx={{ flexGrow: 1 }}
           options={options}
           value={value}
+          // Only show the dropdown once there's something to show (results or a
+          // pending search) — never an empty "No options" popup on a blank click.
+          open={open && (options.length > 0 || loading)}
+          onOpen={() => setOpen(true)}
+          onClose={() => setOpen(false)}
           onChange={(_, newValue) => onChange(newValue)}
           onInputChange={(_, newInput, reason) => {
             if (reason === "input") setInput(newInput);
