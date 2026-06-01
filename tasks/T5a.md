@@ -1,17 +1,45 @@
 # T5a: Geo stack setup (map foundation)
 
-**Goal:** Install MapLibre GL JS and render a basic interactive map with free
-vector tiles. This is the shared foundation for the pin-picker (T6a/T6b) and the
-result map (T10). Depends on the stack chosen in T5.
+**Goal:** Stand up the frontend test runner and render a sleek dark MapLibre map.
+Shared foundation for the pin-picker (T6a/T6b) and the result map (T10).
+
+## Design (agreed 2026-06-01)
+
+- **Integration:** **react-map-gl** (`react-map-gl/maplibre`) over **maplibre-gl**
+  — declarative `<Map>`/`<Marker>`/`<Source>`/`<Layer>` with a `getMap()` escape
+  hatch to the raw MapLibre instance when needed.
+- **Style:** keyless **CARTO Dark Matter**
+  (`https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json`), swappable
+  via `NEXT_PUBLIC_MAP_STYLE_URL`. Attribution: © OpenStreetMap, © CARTO.
+- **Next.js:** the map is a client component (`"use client"`), dynamically
+  imported with `ssr: false` (MapLibre needs `window`/WebGL); import
+  `maplibre-gl/dist/maplibre-gl.css`.
+- **Testing:** **Vitest + React Testing Library** (jsdom). WebGL can't run in
+  jsdom, so map components are tested with **react-map-gl mocked** (assert the
+  component renders) — the real visual check is `npm run build` + a browser. The
+  test infra's real payoff is logic in T6b (debounce/resolution) and T6 (validation).
+- **Deps to add (approved):** prod `maplibre-gl`, `react-map-gl`; dev `vitest`,
+  `@vitejs/plugin-react`, `@testing-library/react`, `@testing-library/jest-dom`,
+  `@testing-library/user-event`, `jsdom`.
 
 ## Subtasks
 
-- [ ] **T5a.1** Add MapLibre GL JS to the frontend
-  - Install the dependency (ask first per protocol); configure a keyless
-    **dark-minimal** vector style (e.g. CARTO Dark Matter or a Protomaps dark
-    theme), with the style URL swappable. No API key required.
-  - Test: a smoke test / Storybook-style page mounts the map without errors.
+- [ ] **T5a.1** Frontend test infra (Vitest + RTL)
+  - Add the dev deps; `vitest.config.ts` (jsdom env, React plugin); a setup file
+    wiring `@testing-library/jest-dom`; a `test` script in `package.json`. Add the
+    test command to CLAUDE.md.
+  - Test: a trivial smoke test (e.g. a tiny pure helper, or `render`-ing a static
+    element) passes under `npm test`.
 
-- [ ] **T5a.2** Render a basic interactive map
-  - A page or component mounts a pan/zoom map centered on the continental U.S.
-  - Test: component renders; map container is present in the DOM.
+- [ ] **T5a.2** `MapView` component (dark base map)
+  - Add `maplibre-gl` + `react-map-gl`. Create a client component
+    `app/components/MapView.tsx`: a `react-map-gl/maplibre` `<Map>` with the CARTO
+    Dark Matter style (from `NEXT_PUBLIC_MAP_STYLE_URL`, with a default), an initial
+    view over the continental U.S., pan/zoom + `NavigationControl`, CSS imported.
+    (T6a later extends this with marker/pin props — same component.)
+  - Test (react-map-gl mocked): the component renders its map container.
+
+- [ ] **T5a.3** Render on the page
+  - Mount `MapView` full-viewport on the home page (replacing the starter
+    boilerplate), dynamically imported with `ssr: false`.
+  - Verify: `npm run build` succeeds and the dark map renders/pans in a browser.
