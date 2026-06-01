@@ -68,6 +68,21 @@ describe("MapView", () => {
     expect(onPinPlaced).toHaveBeenCalledWith(41, -91);
   });
 
+  it("shows a legend for the marker kinds present", () => {
+    render(
+      <MapView
+        markers={[
+          { lat: 1, lng: 2, kind: "pickup" },
+          { lat: 3, lng: 4, kind: "fuel" },
+        ]}
+      />,
+    );
+    expect(screen.getByText("Pickup")).toBeInTheDocument();
+    expect(screen.getByText("Fuel")).toBeInTheDocument();
+    // Kinds not on the map aren't listed.
+    expect(screen.queryByText("Rest")).not.toBeInTheDocument();
+  });
+
   it("draws the route line through the given coordinates", () => {
     const route: [number, number][] = [
       [-87.6298, 41.8781],

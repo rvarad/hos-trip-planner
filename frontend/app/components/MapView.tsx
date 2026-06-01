@@ -11,6 +11,13 @@ import Map, {
   type MarkerDragEvent,
 } from "react-map-gl/maplibre";
 import "maplibre-gl/dist/maplibre-gl.css";
+import type { SvgIconComponent } from "@mui/icons-material";
+import TripOriginIcon from "@mui/icons-material/TripOrigin";
+import Inventory2Icon from "@mui/icons-material/Inventory2";
+import PlaceIcon from "@mui/icons-material/Place";
+import LocalGasStationIcon from "@mui/icons-material/LocalGasStation";
+import LocalCafeIcon from "@mui/icons-material/LocalCafe";
+import HotelIcon from "@mui/icons-material/Hotel";
 
 const MAP_STYLE =
   process.env.NEXT_PUBLIC_MAP_STYLE_URL ??
@@ -23,18 +30,24 @@ export type MapMarker = {
   label?: string;
 };
 
-// Semantic marker palette. "#38bdf8" matches the theme accent.
-const MARKER_COLORS: Record<string, string> = {
-  current: "#38bdf8", // trip start
-  pickup: "#22c55e", // green
-  dropoff: "#ef4444", // red
-  fuel: "#f59e0b", // amber
-  break: "#818cf8", // indigo — 30-min break
-  rest: "#a855f7", // purple — 10h rest / 34h restart
+// Semantic marker palette + icon. "#38bdf8" matches the theme accent. This is
+// the single source of truth for marker colors, icons, and legend labels.
+const KIND_META: Record<
+  string,
+  { label: string; color: string; Icon: SvgIconComponent }
+> = {
+  current: { label: "Current", color: "#38bdf8", Icon: TripOriginIcon },
+  pickup: { label: "Pickup", color: "#22c55e", Icon: Inventory2Icon },
+  dropoff: { label: "Drop-off", color: "#ef4444", Icon: PlaceIcon },
+  fuel: { label: "Fuel", color: "#f59e0b", Icon: LocalGasStationIcon },
+  break: { label: "Break", color: "#818cf8", Icon: LocalCafeIcon },
+  rest: { label: "Rest", color: "#a855f7", Icon: HotelIcon },
 };
 
-function markerColor(kind: string): string {
-  return MARKER_COLORS[kind] ?? "#38bdf8";
+const KIND_ORDER = ["current", "pickup", "dropoff", "fuel", "break", "rest"];
+
+function metaFor(kind: string) {
+  return KIND_META[kind] ?? KIND_META.current;
 }
 
 type MapViewProps = {
@@ -69,6 +82,11 @@ export default function MapView({
       { padding: 64, maxZoom: 12, duration: 0 },
     );
   }, [markers, fitToMarkers]);
+
+  // Legend lists only the kinds actually on the map, in a stable order.
+  const presentKinds = KIND_ORDER.filter((k) =>
+    markers?.some((m) => m.kind === k),
+  );
 
   return (
     <Map
@@ -123,21 +141,77 @@ export default function MapView({
           />
         </Marker>
       )}
-      {markers?.map((m, i) => (
-        <Marker key={i} longitude={m.lng} latitude={m.lat}>
-          <div
-            title={m.label}
-            style={{
-              width: 14,
-              height: 14,
-              borderRadius: "50%",
-              background: markerColor(m.kind),
-              border: "2px solid #fff",
-              boxShadow: "0 0 0 1px rgba(0,0,0,0.4)",
-            }}
-          />
-        </Marker>
-      ))}
+      {markers?.map((m, i) => {
+        const { color, Icon, label } = metaFor(m.kind);
+        return (
+          <Marker key={i} longitude={m.lng} latitude={m.lat}>
+            <div
+              title={m.label ?? label}
+              style={{
+                width: 26,
+                height: 26,
+                borderRadius: "50%",
+                background: color,
+                border: "2px solid #fff",
+                boxShadow: "0 0 0 1px rgba(0,0,0,0.4)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Icon style={{ width: 15, height: 15, color: "#fff" }} />
+            </div>
+          </Marker>
+        );
+      })}
+
+      {presentKinds.length > 0 && (
+        <div
+          style={{
+            position: "absolute",
+            left: 8,
+            bottom: 8,
+            zIndex: 1,
+            background: "rgba(17,23,30,0.85)",
+            color: "#fff",
+            borderRadius: 8,
+            padding: "8px 10px",
+            font: "12px sans-serif",
+            boxShadow: "0 1px 4px rgba(0,0,0,0.5)",
+          }}
+        >
+          {presentKinds.map((k) => {
+            const { label, color, Icon } = KIND_META[k];
+            return (
+              <div
+                key={k}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  marginBottom: 2,
+                }}
+              >
+                <span
+                  style={{
+                    width: 18,
+                    height: 18,
+                    borderRadius: "50%",
+                    background: color,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  <Icon style={{ width: 12, height: 12, color: "#fff" }} />
+                </span>
+                <span>{label}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </Map>
   );
 }
