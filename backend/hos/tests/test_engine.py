@@ -156,8 +156,13 @@ def test_plan_trip_resets_at_11h_driving_limit():
     trip = TripInput(legs=legs, current_cycle_used_minutes=0, start_time_minutes=480)
     result = plan_trip(trip)
 
-    # Exactly one 10-hour off-duty reset.
-    resets = [s for s in result.segments if s.status == DutyStatus.OFF_DUTY]
+    # Exactly one 10-hour off-duty reset (OFF_DUTY also covers 30-min breaks,
+    # so isolate the reset by its duration).
+    resets = [
+        s
+        for s in result.segments
+        if s.status == DutyStatus.OFF_DUTY and (s.end_min - s.start_min) >= 600
+    ]
     assert len(resets) == 1
     assert resets[0].end_min - resets[0].start_min == 600
 
@@ -181,3 +186,54 @@ def test_plan_trip_resets_at_11h_driving_limit():
         window += dur
         assert drive_in_period <= 660
         assert window <= 840
+
+
+def test_plan_trip_inserts_break_after_8h_driving():
+    # After the pickup resets the break clock, leg1 has 9h of continuous driving,
+    # which forces a 30-minute break at the 8h mark.
+    legs = [
+        RouteLeg(start=CHICAGO, end=ST_LOUIS, distance_miles=25.0, duration_minutes=30),
+        RouteLeg(start=ST_LOUIS, end=DALLAS, distance_miles=450.0, duration_minutes=540),
+    ]
+    trip = TripInput(legs=legs, current_cycle_used_minutes=0, start_time_minutes=480)
+    result = plan_trip(trip)
+
+    breaks = [
+        s
+        for s in result.segments
+        if s.status == DutyStatus.OFF_DUTY and (s.end_min - s.start_min) < 600
+    ]
+    assert len(breaks) == 1
+    assert breaks[0].end_min - breaks[0].start_min == 30
+    # No 10-hour reset was needed (driving stays under 11h within the period).
+    assert not [
+        s
+        for s in result.segments
+        if s.status == DutyStatus.OFF_DUTY and (s.end_min - s.start_min) >= 600
+    ]
+
+    # Invariant: driving-since-break never exceeds 8h (480); any non-driving
+    # segment >= 30 min resets it.
+    since_break = 0
+    for s in result.segments:
+        dur = s.end_min - s.start_min
+        if s.status != DutyStatus.DRIVING and dur >= 30:
+            since_break = 0
+            continue
+        if s.status == DutyStatus.DRIVING:
+            since_break += dur
+        assert since_break <= 480
+
+
+def test_stop_satisfies_break():
+    # A pickup (>= 30-min non-driving) before the 8h mark resets the break clock,
+    # so no dedicated break is inserted: 7h drive, pickup, 1h drive.
+    legs = [
+        RouteLeg(start=CHICAGO, end=ST_LOUIS, distance_miles=350.0, duration_minutes=420),
+        RouteLeg(start=ST_LOUIS, end=DALLAS, distance_miles=50.0, duration_minutes=60),
+    ]
+    trip = TripInput(legs=legs, current_cycle_used_minutes=0, start_time_minutes=480)
+    result = plan_trip(trip)
+
+    # No off-duty segments at all: no break, no reset.
+    assert not [s for s in result.segments if s.status == DutyStatus.OFF_DUTY]

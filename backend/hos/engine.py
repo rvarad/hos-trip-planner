@@ -7,9 +7,11 @@ Works in integer minutes-from-trip-start; clock formatting happens at the edges.
 from dataclasses import dataclass
 
 from hos.rules import (
+    DRIVING_BEFORE_BREAK_MIN,
     DROPOFF_MIN,
     MAX_DRIVING_PER_PERIOD_MIN,
     MAX_DUTY_WINDOW_MIN,
+    MIN_BREAK_MIN,
     MIN_RESET_OFF_DUTY_MIN,
     PICKUP_MIN,
     DutyStatus,
@@ -161,9 +163,18 @@ def _drive_leg(
             remaining,
             MAX_DRIVING_PER_PERIOD_MIN - state.driving_in_period,
             MAX_DUTY_WINDOW_MIN - state.elapsed_in_window,
+            DRIVING_BEFORE_BREAK_MIN - state.driving_since_break,
         )
         if drivable <= 0:
-            clock = _append_reset(segments, clock, state, leg.end)
+            # A 10-hour reset takes priority (it ends the period and also clears
+            # the break clock); otherwise the 8h driving cap means a 30-min break.
+            if (
+                state.driving_in_period >= MAX_DRIVING_PER_PERIOD_MIN
+                or state.elapsed_in_window >= MAX_DUTY_WINDOW_MIN
+            ):
+                clock = _append_reset(segments, clock, state, leg.end)
+            else:
+                clock = _append_break(segments, clock, state, leg.end)
             continue
 
         miles = leg.distance_miles * drivable / leg.duration_minutes
@@ -210,6 +221,30 @@ def _append_reset(
     return clock + MIN_RESET_OFF_DUTY_MIN
 
 
+def _append_break(
+    segments: list[DutySegment], clock: int, state: DriverState, where: Location
+) -> int:
+    """Insert a 30-minute off-duty break; clear the since-break clock.
+
+    The break consumes the 14h window (which never pauses) but does not touch
+    the period or cycle clocks.
+    """
+    segments.append(
+        DutySegment(
+            start_min=clock,
+            end_min=clock + MIN_BREAK_MIN,
+            status=DutyStatus.OFF_DUTY,
+            description="30-min break",
+            start_location=where,
+            end_location=where,
+            miles=0.0,
+        )
+    )
+    state.elapsed_in_window += MIN_BREAK_MIN
+    state.driving_since_break = 0
+    return clock + MIN_BREAK_MIN
+
+
 def _append_on_duty_stop(
     segments: list[DutySegment],
     clock: int,
@@ -221,7 +256,8 @@ def _append_on_duty_stop(
     """Append an on-duty-not-driving stop of `minutes`; return the advanced clock.
 
     On-duty-not-driving time consumes the 14h window (which never pauses) and
-    counts toward the cycle, but does not add to the driving clocks.
+    counts toward the cycle, but does not add to the driving clocks. Being >= the
+    30-min break, such a stop also satisfies the break (§ 395.3(a)(3)(ii)).
     """
     segments.append(
         DutySegment(
@@ -236,4 +272,6 @@ def _append_on_duty_stop(
     )
     state.elapsed_in_window += minutes
     state.on_duty_in_cycle += minutes
+    if minutes >= MIN_BREAK_MIN:
+        state.driving_since_break = 0
     return clock + minutes
