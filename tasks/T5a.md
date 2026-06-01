@@ -43,7 +43,7 @@ Shared foundation for the pin-picker (T6a/T6b) and the result map (T10).
     (T6a later extends this with marker/pin props — same component.)
   - Test (react-map-gl mocked): the component renders its map container.
 
-- [ ] **T5a.3** Dark MUI theme
+- [x] **T5a.3** Dark MUI theme
   - In `app/providers.tsx`, replace `createTheme()` with a dark theme
     (`palette.mode: "dark"` + an accent color used for the route/markers). The
     existing `CssBaseline` then applies the dark background/text app-wide.
