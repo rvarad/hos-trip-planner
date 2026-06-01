@@ -8,7 +8,7 @@
 | T4  | DRF POST /api/plan-trip                     | done        |
 | T5  | Geo provider stack + routing integration    | done        |
 | T5a | Geo stack setup (map foundation)            | done        |
-| T6  | Next.js MUI input form                      | in progress |
+| T6  | Next.js MUI input form                      | done        |
 | T6a | Reusable `<MapView>` component              | done        |
 | T6b | `<LocationField>` (search or drop a pin)    | done        |
 | T7  | Next.js server-side proxy routes            | done        |

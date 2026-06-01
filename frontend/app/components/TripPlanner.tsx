@@ -1,13 +1,27 @@
 "use client";
 
 import { useState } from "react";
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
 
 import LocationField from "./LocationField";
 import MapView, { type MapMarker } from "./MapView";
 import { type ResolvedLocation } from "../lib/geocoding";
+
+interface PlanResult {
+  routing: string;
+  segments: { status: string }[];
+  days: unknown[];
+  total_miles: number;
+}
+
+function parseStartTimeMinutes(hhmm: string): number {
+  const [h, m] = hhmm.split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
 
 export default function TripPlanner() {
   const [current, setCurrent] = useState<ResolvedLocation | null>(null);
@@ -16,6 +30,14 @@ export default function TripPlanner() {
   const [cycleHours, setCycleHours] = useState("0");
   const [startTime, setStartTime] = useState("08:00");
 
+  const [planResult, setPlanResult] = useState<PlanResult | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const cycleNum = Number(cycleHours);
+  const cycleValid = cycleHours !== "" && !isNaN(cycleNum) && cycleNum >= 0 && cycleNum <= 70;
+  const canPlan = !!current && !!pickup && !!dropoff && cycleValid && !isLoading;
+
   const markers: MapMarker[] = (
     [
       current && { ...current, kind: "current" },
@@ -23,6 +45,39 @@ export default function TripPlanner() {
       dropoff && { ...dropoff, kind: "dropoff" },
     ].filter(Boolean) as MapMarker[]
   );
+
+  async function handleSubmit() {
+    if (!canPlan || !current || !pickup || !dropoff) return;
+
+    const body = {
+      current_location: { label: current.label, lat: current.lat, lng: current.lng },
+      pickup: { label: pickup.label, lat: pickup.lat, lng: pickup.lng },
+      dropoff: { label: dropoff.label, lat: dropoff.lat, lng: dropoff.lng },
+      cycle_hours_used: cycleNum,
+      start_time_minutes: parseStartTimeMinutes(startTime),
+    };
+
+    setIsLoading(true);
+    setError(null);
+    setPlanResult(null);
+
+    try {
+      const res = await fetch("/api/plan-trip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        throw new Error(`Server error: ${res.status}`);
+      }
+      const data: PlanResult = await res.json();
+      setPlanResult(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   return (
     <Box
@@ -66,8 +121,29 @@ export default function TripPlanner() {
           slotProps={{ inputLabel: { shrink: true } }}
           sx={{ width: 140 }}
         />
-        <Button variant="contained">Plan trip</Button>
+        <Button variant="contained" disabled={!canPlan} onClick={handleSubmit}>
+          {isLoading ? "Planning…" : "Plan trip"}
+        </Button>
       </Box>
+
+      {error && (
+        <Alert severity="error" sx={{ mx: 1.5 }}>
+          {error}
+        </Alert>
+      )}
+
+      {planResult && (
+        <Box sx={{ px: 2, py: 1 }}>
+          {planResult.routing === "estimated" && (
+            <Alert severity="info" sx={{ mb: 1 }}>
+              Distances are approximate (estimated routing).
+            </Alert>
+          )}
+          <Typography variant="body2">
+            {planResult.total_miles} miles · {planResult.segments.length} segments · {planResult.days.length} days
+          </Typography>
+        </Box>
+      )}
 
       <Box sx={{ flex: 1, position: "relative" }}>
         <MapView markers={markers} />
