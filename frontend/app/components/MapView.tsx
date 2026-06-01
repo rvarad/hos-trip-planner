@@ -23,12 +23,14 @@ export type MapMarker = {
   label?: string;
 };
 
-// Minimal palette; the full semantic palette (fuel/rest/etc.) is fleshed out in
-// T10. "#38bdf8" matches the theme accent.
+// Semantic marker palette. "#38bdf8" matches the theme accent.
 const MARKER_COLORS: Record<string, string> = {
-  current: "#38bdf8",
-  pickup: "#22c55e",
-  dropoff: "#ef4444",
+  current: "#38bdf8", // trip start
+  pickup: "#22c55e", // green
+  dropoff: "#ef4444", // red
+  fuel: "#f59e0b", // amber
+  break: "#818cf8", // indigo — 30-min break
+  rest: "#a855f7", // purple — 10h rest / 34h restart
 };
 
 function markerColor(kind: string): string {

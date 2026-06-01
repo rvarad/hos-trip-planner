@@ -11,6 +11,7 @@ import LocationField from "./LocationField";
 import MapView, { type MapMarker } from "./MapView";
 import DailyLogSheet, { type DutySegment } from "./DailyLogSheet";
 import { type ResolvedLocation } from "../lib/geocoding";
+import { markersFromSegments, type PlanSegment } from "../lib/tripMarkers";
 
 interface DayLog {
   date_offset: number;
@@ -19,9 +20,10 @@ interface DayLog {
 
 interface PlanResult {
   routing: string;
-  segments: DutySegment[];
+  segments: PlanSegment[];
   days: DayLog[];
   total_miles: number;
+  route: [number, number][];
 }
 
 function parseStartTimeMinutes(hhmm: string): number {
@@ -44,13 +46,19 @@ export default function TripPlanner() {
   const cycleValid = cycleHours !== "" && !isNaN(cycleNum) && cycleNum >= 0 && cycleNum <= 70;
   const canPlan = !!current && !!pickup && !!dropoff && cycleValid && !isLoading;
 
-  const markers: MapMarker[] = (
+  const inputMarkers: MapMarker[] = (
     [
       current && { ...current, kind: "current" },
       pickup && { ...pickup, kind: "pickup" },
       dropoff && { ...dropoff, kind: "dropoff" },
     ].filter(Boolean) as MapMarker[]
   );
+
+  // Once a plan exists, show its route line and stop markers; before that, show
+  // the input locations the user has chosen so far.
+  const mapMarkers = planResult
+    ? markersFromSegments(planResult.segments)
+    : inputMarkers;
 
   async function handleSubmit() {
     if (!canPlan || !current || !pickup || !dropoff) return;
@@ -166,7 +174,7 @@ export default function TripPlanner() {
       )}
 
       <Box sx={{ flex: 1, position: "relative" }}>
-        <MapView markers={markers} />
+        <MapView markers={mapMarkers} route={planResult?.route} />
       </Box>
     </Box>
   );
