@@ -9,7 +9,7 @@
 | T5  | Geo provider stack + routing integration    | done        |
 | T5a | Geo stack setup (map foundation)            | done        |
 | T6  | Next.js MUI input form                      | not started |
-| T6a | Reusable `<MapView>` component              | not started |
+| T6a | Reusable `<MapView>` component              | in progress |
 | T6b | `<LocationField>` (search or drop a pin)    | not started |
 | T7  | Next.js server-side proxy routes            | not started |
 | T8  | Log-sheet SVG rendering                     | not started |

@@ -24,7 +24,7 @@ a draggable pin-drop, and frame the view.
 
 ## Subtasks
 
-- [ ] **T6a.1** Markers + camera framing
+- [x] **T6a.1** Markers + camera framing
   - Add the optional `markers` prop and a `MapMarker` type; render one marker per
     entry (kind-based color, accent default). Add `fitToMarkers` framing via the
     map ref (`fitBounds`), falling back to the default view.
