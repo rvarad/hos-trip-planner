@@ -1,4 +1,10 @@
-from hos.serializers import LocationSerializer, PlanTripRequestSerializer
+from hos.engine import DayLog, DutySegment, Location, PlanResult
+from hos.rules import DutyStatus
+from hos.serializers import (
+    LocationSerializer,
+    PlanResultSerializer,
+    PlanTripRequestSerializer,
+)
 
 
 def _loc(label):
@@ -71,3 +77,25 @@ def test_cycle_hours_out_of_range_rejected():
     s = PlanTripRequestSerializer(data=_trip_payload(cycle_hours_used=71.0))
     assert not s.is_valid()
     assert "cycle_hours_used" in s.errors
+
+
+def test_plan_result_serialization():
+    loc_a = Location(label="A", lat=1.0, lng=2.0)
+    loc_b = Location(label="B", lat=3.0, lng=4.0)
+    seg = DutySegment(
+        start_min=0,
+        end_min=120,
+        status=DutyStatus.DRIVING,
+        description="Drive to B",
+        start_location=loc_a,
+        end_location=loc_b,
+        miles=50.0,
+    )
+    result = PlanResult(segments=[seg], days=[DayLog(date_offset=0, segments=[seg])], total_miles=50.0)
+
+    data = PlanResultSerializer(result).data
+    assert data["total_miles"] == 50.0
+    assert data["segments"][0]["status"] == "driving"
+    assert data["segments"][0]["end_min"] == 120
+    assert data["segments"][0]["start_location"] == {"label": "A", "lat": 1.0, "lng": 2.0}
+    assert data["days"][0]["segments"][0]["status"] == "driving"

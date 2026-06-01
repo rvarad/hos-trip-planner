@@ -23,3 +23,30 @@ class PlanTripRequestSerializer(serializers.Serializer):
     dropoff = LocationSerializer()
     cycle_hours_used = serializers.FloatField(min_value=0, max_value=70)
     start_time_minutes = serializers.IntegerField(min_value=0, max_value=1439, default=0)
+
+
+class DutySegmentSerializer(serializers.Serializer):
+    """One timeline segment from the engine's `DutySegment` dataclass."""
+
+    start_min = serializers.IntegerField()
+    end_min = serializers.IntegerField()
+    status = serializers.CharField(source="status.value")
+    description = serializers.CharField()
+    start_location = LocationSerializer()
+    end_location = LocationSerializer()
+    miles = serializers.FloatField()
+
+
+class DayLogSerializer(serializers.Serializer):
+    """One day of the timeline from the engine's `DayLog` dataclass."""
+
+    date_offset = serializers.IntegerField()
+    segments = DutySegmentSerializer(many=True)
+
+
+class PlanResultSerializer(serializers.Serializer):
+    """The engine's `PlanResult`: flat timeline, per-day logs, and total miles."""
+
+    segments = DutySegmentSerializer(many=True)
+    days = DayLogSerializer(many=True)
+    total_miles = serializers.FloatField()
