@@ -6,6 +6,7 @@ from hos.engine import (
     PlanResult,
     RouteLeg,
     TripInput,
+    _point_in_leg,
     plan_trip,
     rolling_cycle_minutes,
     slice_days,
@@ -308,6 +309,36 @@ def test_cycle_cap_inserts_34h_restart():
         s.status == DutyStatus.DRIVING and s.start_min >= restart_end
         for s in result.segments
     )
+
+
+def test_point_in_leg_follows_road_geometry():
+    # The road bends well north of the straight A->B chord (which lies on lat 0).
+    # A mid-leg point must sit on the bend, not on the chord, so map markers land
+    # on the route line (T11.2). The two geometry segments are mirror images, so
+    # the midpoint by distance is the apex vertex.
+    leg = RouteLeg(
+        start=Location(label="A", lat=0.0, lng=0.0),
+        end=Location(label="B", lat=0.0, lng=2.0),
+        distance_miles=100.0,
+        duration_minutes=100,
+        geometry=((0.0, 0.0), (1.0, 1.0), (0.0, 2.0)),
+    )
+    mid = _point_in_leg(leg, 50)
+    assert mid.lat > 0.5  # up on the bend, far off the lat-0 chord
+    assert abs(mid.lng - 1.0) < 0.01  # at the apex (lng 1.0)
+
+
+def test_point_in_leg_falls_back_without_geometry():
+    # No geometry -> straight-line interpolation between the endpoints.
+    leg = RouteLeg(
+        start=Location(label="A", lat=0.0, lng=0.0),
+        end=Location(label="B", lat=10.0, lng=20.0),
+        distance_miles=100.0,
+        duration_minutes=100,
+    )
+    mid = _point_in_leg(leg, 50)
+    assert mid.lat == 5.0
+    assert mid.lng == 10.0
 
 
 def test_mid_leg_stop_has_interpolated_location():

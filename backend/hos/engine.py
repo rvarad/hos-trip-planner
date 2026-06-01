@@ -4,6 +4,7 @@ Pure Python: no Django imports, no I/O, no clock reads. Deterministic.
 Works in integer minutes-from-trip-start; clock formatting happens at the edges.
 """
 
+import math
 from dataclasses import dataclass
 
 from hos.rules import (
@@ -212,21 +213,63 @@ def rolling_cycle_minutes(
     return sum(daily_on_duty_minutes[start : day_index + 1])
 
 
+def _haversine_miles(a: tuple[float, float], b: tuple[float, float]) -> float:
+    """Great-circle distance in miles between two (lat, lng) points."""
+    lat1, lng1, lat2, lng2 = map(math.radians, (a[0], a[1], b[0], b[1]))
+    h = (
+        math.sin((lat2 - lat1) / 2) ** 2
+        + math.cos(lat1) * math.cos(lat2) * math.sin((lng2 - lng1) / 2) ** 2
+    )
+    return 2 * 3958.8 * math.asin(math.sqrt(h))
+
+
+def _point_along(
+    geometry: tuple[tuple[float, float], ...], fraction: float
+) -> tuple[float, float] | None:
+    """Walk the geometry polyline to the point at `fraction` of its total length.
+
+    Returns the (lat, lng) at that point, or None when there isn't enough
+    geometry to interpolate (so the caller can fall back to the endpoints).
+    """
+    if len(geometry) < 2:
+        return None
+    lengths = [_haversine_miles(a, b) for a, b in zip(geometry, geometry[1:])]
+    total = sum(lengths)
+    if total <= 0:
+        return None
+    target = fraction * total
+    acc = 0.0
+    for (a, b), length in zip(zip(geometry, geometry[1:]), lengths):
+        if acc + length >= target:
+            f = (target - acc) / length if length > 0 else 0.0
+            return (a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f)
+        acc += length
+    return geometry[-1]
+
+
 def _point_in_leg(leg: RouteLeg, minutes_done: int) -> Location:
     """The location reached after driving `minutes_done` of a leg.
 
-    Endpoints keep their real labels; intermediate points are linearly
-    interpolated and labelled by distance from the leg's start.
+    Endpoints keep their real labels. Intermediate points are placed along the
+    leg's actual road geometry (by distance fraction) so map markers sit on the
+    drawn route; legs without geometry fall back to a straight-line interpolation
+    between the endpoints. Labelled by distance from the leg's start.
     """
     if minutes_done <= 0:
         return leg.start
     if minutes_done >= leg.duration_minutes:
         return leg.end
     fraction = minutes_done / leg.duration_minutes
+    point = _point_along(leg.geometry, fraction)
+    if point is None:
+        point = (
+            leg.start.lat + (leg.end.lat - leg.start.lat) * fraction,
+            leg.start.lng + (leg.end.lng - leg.start.lng) * fraction,
+        )
     return Location(
         label=f"En route (~{round(leg.distance_miles * fraction)} mi from {leg.start.label})",
-        lat=leg.start.lat + (leg.end.lat - leg.start.lat) * fraction,
-        lng=leg.start.lng + (leg.end.lng - leg.start.lng) * fraction,
+        lat=point[0],
+        lng=point[1],
     )
 
 
