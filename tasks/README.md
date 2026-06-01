@@ -4,7 +4,7 @@
 |-----|---------------------------------------------|-------------|
 | T1  | Foundation skeleton                         | done        |
 | T2  | HOS engine data shapes + function skeleton  | done        |
-| T3  | HOS engine logic + tests                    | not started |
+| T3  | HOS engine logic + tests                    | in progress |
 | T4  | DRF POST /api/plan-trip                     | not started |
 | T5  | Geo provider stack + routing integration    | not started |
 | T5a | Geo stack setup (map foundation)            | not started |

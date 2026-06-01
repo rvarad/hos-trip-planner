@@ -6,7 +6,7 @@ Works in integer minutes-from-trip-start; clock formatting happens at the edges.
 
 from dataclasses import dataclass
 
-from hos.rules import DutyStatus
+from hos.rules import DROPOFF_MIN, PICKUP_MIN, DutyStatus
 
 
 @dataclass(frozen=True)
@@ -116,6 +116,56 @@ class PlanResult:
 def plan_trip(inp: TripInput) -> PlanResult:
     """Build an HOS-compliant timeline for the trip. Engine entry point.
 
-    Not yet implemented — the HOS logic lands in T3.
+    T3.1: walk the legs, emitting a driving segment per leg plus a 60-minute
+    on-duty stop at pickup (after the first leg) and drop-off (after the last).
+    HOS limits, fuel stops, and mid-leg interpolation arrive in later subtasks.
     """
-    raise NotImplementedError
+    state = DriverState(on_duty_in_cycle=inp.current_cycle_used_minutes)
+    segments: list[DutySegment] = []
+    clock = 0
+    total_miles = 0.0
+    last = len(inp.legs) - 1
+
+    for i, leg in enumerate(inp.legs):
+        segments.append(
+            DutySegment(
+                start_min=clock,
+                end_min=clock + leg.duration_minutes,
+                status=DutyStatus.DRIVING,
+                description=f"Drive to {leg.end.label}",
+                start_location=leg.start,
+                end_location=leg.end,
+                miles=leg.distance_miles,
+            )
+        )
+        clock += leg.duration_minutes
+        total_miles += leg.distance_miles
+
+        if i == 0:
+            clock = _append_on_duty_stop(segments, clock, leg.end, "Pickup", PICKUP_MIN)
+        if i == last:
+            clock = _append_on_duty_stop(segments, clock, leg.end, "Drop-off", DROPOFF_MIN)
+
+    return PlanResult(segments=segments, days=[], total_miles=total_miles)
+
+
+def _append_on_duty_stop(
+    segments: list[DutySegment],
+    clock: int,
+    where: Location,
+    description: str,
+    minutes: int,
+) -> int:
+    """Append an on-duty-not-driving stop of `minutes`; return the advanced clock."""
+    segments.append(
+        DutySegment(
+            start_min=clock,
+            end_min=clock + minutes,
+            status=DutyStatus.ON_DUTY_NOT_DRIVING,
+            description=description,
+            start_location=where,
+            end_location=where,
+            miles=0.0,
+        )
+    )
+    return clock + minutes

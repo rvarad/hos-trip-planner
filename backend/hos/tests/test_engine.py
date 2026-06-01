@@ -1,5 +1,3 @@
-import pytest
-
 from hos.engine import (
     DayLog,
     DriverState,
@@ -121,11 +119,28 @@ def test_plan_result_fields_accessible():
     assert result.total_miles == 0.0
 
 
-def test_plan_trip_not_implemented():
-    trip = TripInput(
-        legs=_sample_legs(),
-        current_cycle_used_minutes=750,
-        start_time_minutes=480,
-    )
-    with pytest.raises(NotImplementedError):
-        plan_trip(trip)
+def test_plan_trip_walks_legs():
+    # A short trip that stays within every HOS limit, so this stays valid as
+    # later subtasks add splitting: 250 mi, 5h driving, no break/fuel/reset.
+    legs = [
+        RouteLeg(start=CHICAGO, end=ST_LOUIS, distance_miles=100.0, duration_minutes=120),
+        RouteLeg(start=ST_LOUIS, end=DALLAS, distance_miles=150.0, duration_minutes=180),
+    ]
+    trip = TripInput(legs=legs, current_cycle_used_minutes=0, start_time_minutes=480)
+    result = plan_trip(trip)
+
+    assert [s.status for s in result.segments] == [
+        DutyStatus.DRIVING,
+        DutyStatus.ON_DUTY_NOT_DRIVING,
+        DutyStatus.DRIVING,
+        DutyStatus.ON_DUTY_NOT_DRIVING,
+    ]
+    # Driving durations match each leg; both stops are 60 min.
+    durations = [s.end_min - s.start_min for s in result.segments]
+    assert durations == [120, 60, 180, 60]
+    # Contiguous from minute 0.
+    assert result.segments[0].start_min == 0
+    for earlier, later in zip(result.segments, result.segments[1:]):
+        assert later.start_min == earlier.end_min
+    assert result.total_miles == 250.0
+    assert result.days == []
