@@ -294,3 +294,24 @@ def test_cycle_cap_inserts_34h_restart():
         s.status == DutyStatus.DRIVING and s.start_min >= restart_end
         for s in result.segments
     )
+
+
+def test_mid_leg_stop_has_interpolated_location():
+    # The fuel stop lands mid-leg1 (St. Louis -> Dallas), so its location is an
+    # interpolated point between those endpoints.
+    legs = [
+        RouteLeg(start=CHICAGO, end=ST_LOUIS, distance_miles=50.0, duration_minutes=30),
+        RouteLeg(start=ST_LOUIS, end=DALLAS, distance_miles=1450.0, duration_minutes=300),
+    ]
+    trip = TripInput(legs=legs, current_cycle_used_minutes=0, start_time_minutes=480)
+    result = plan_trip(trip)
+
+    fuel = next(s for s in result.segments if s.description == "Fuel stop")
+    loc = fuel.start_location
+    assert min(ST_LOUIS.lat, DALLAS.lat) < loc.lat < max(ST_LOUIS.lat, DALLAS.lat)
+    assert min(ST_LOUIS.lng, DALLAS.lng) < loc.lng < max(ST_LOUIS.lng, DALLAS.lng)
+    assert "En route" in loc.label
+
+    # Trip endpoints keep full fidelity (not interpolated).
+    first_drive = next(s for s in result.segments if s.status == DutyStatus.DRIVING)
+    assert first_drive.start_location == CHICAGO

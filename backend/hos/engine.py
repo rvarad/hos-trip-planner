@@ -153,6 +153,24 @@ def plan_trip(inp: TripInput) -> PlanResult:
     return PlanResult(segments=segments, days=[], total_miles=total_miles)
 
 
+def _point_in_leg(leg: RouteLeg, minutes_done: int) -> Location:
+    """The location reached after driving `minutes_done` of a leg.
+
+    Endpoints keep their real labels; intermediate points are linearly
+    interpolated and labelled by distance from the leg's start.
+    """
+    if minutes_done <= 0:
+        return leg.start
+    if minutes_done >= leg.duration_minutes:
+        return leg.end
+    fraction = minutes_done / leg.duration_minutes
+    return Location(
+        label=f"En route (~{round(leg.distance_miles * fraction)} mi from {leg.start.label})",
+        lat=leg.start.lat + (leg.end.lat - leg.start.lat) * fraction,
+        lng=leg.start.lng + (leg.end.lng - leg.start.lng) * fraction,
+    )
+
+
 def _drive_leg(
     leg: RouteLeg, state: DriverState, segments: list[DutySegment], clock: int
 ) -> int:
@@ -169,25 +187,26 @@ def _drive_leg(
             if speed > 0
             else float("inf")
         )
+        here = _point_in_leg(leg, leg.duration_minutes - remaining)
 
         # Remedy priority: a 34-hour restart (cycle exhausted) outranks a 10-hour
         # reset, which outranks a fuel stop, which outranks a 30-min break. A
         # restart is >= 10h off duty so it also clears the period/window/break; a
         # fuel stop is non-driving >= 30 min so it satisfies the break.
         if state.on_duty_in_cycle >= MAX_CYCLE_ON_DUTY_MIN:
-            clock = _append_restart(segments, clock, state, leg.end)
+            clock = _append_restart(segments, clock, state, here)
             continue
         if (
             state.driving_in_period >= MAX_DRIVING_PER_PERIOD_MIN
             or state.elapsed_in_window >= MAX_DUTY_WINDOW_MIN
         ):
-            clock = _append_reset(segments, clock, state, leg.end)
+            clock = _append_reset(segments, clock, state, here)
             continue
         if minutes_to_fuel < 1:
-            clock = _append_fuel_stop(segments, clock, state, leg.end)
+            clock = _append_fuel_stop(segments, clock, state, here)
             continue
         if state.driving_since_break >= DRIVING_BEFORE_BREAK_MIN:
-            clock = _append_break(segments, clock, state, leg.end)
+            clock = _append_break(segments, clock, state, here)
             continue
 
         # Drive the largest chunk allowed by every cap, stopping at the next
@@ -209,8 +228,8 @@ def _drive_leg(
                 end_min=clock + drivable,
                 status=DutyStatus.DRIVING,
                 description=f"Drive to {leg.end.label}",
-                start_location=leg.start,
-                end_location=leg.end,
+                start_location=here,
+                end_location=_point_in_leg(leg, leg.duration_minutes - remaining + drivable),
                 miles=miles,
             )
         )
