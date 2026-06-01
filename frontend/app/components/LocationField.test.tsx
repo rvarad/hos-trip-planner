@@ -20,6 +20,20 @@ function okJson(data: unknown) {
 }
 
 describe("LocationField", () => {
+  it("renders pin and geolocation as icon-only buttons", () => {
+    render(<LocationField label="Pickup" value={null} onChange={() => {}} />);
+    // Reachable by accessible name (aria-label)...
+    expect(
+      screen.getByRole("button", { name: "Drop pin" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Use my location" }),
+    ).toBeInTheDocument();
+    // ...but icon-only: no visible text label.
+    expect(screen.queryByText("Drop pin")).not.toBeInTheDocument();
+    expect(screen.queryByText("Use my location")).not.toBeInTheDocument();
+  });
+
   it("debounces search, then resolves the field on select", async () => {
     const fetchMock = vi.fn(async () =>
       okJson({ results: [{ label: "Chicago, IL", lat: 41.8, lng: -87.6 }] }),

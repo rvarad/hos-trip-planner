@@ -7,8 +7,12 @@ import Dialog from "@mui/material/Dialog";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
+import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
+import Tooltip from "@mui/material/Tooltip";
+import MyLocationIcon from "@mui/icons-material/MyLocation";
+import PushPinOutlinedIcon from "@mui/icons-material/PushPinOutlined";
 
 import MapView from "./MapView";
 import {
@@ -98,8 +102,16 @@ export default function LocationField({
           loading={loading}
           renderInput={(params) => <TextField {...params} label={label} />}
         />
-        <Button onClick={() => setPinOpen(true)}>Drop pin</Button>
-        <Button onClick={handleUseMyLocation}>Use my location</Button>
+        <Tooltip title="Drop pin">
+          <IconButton aria-label="Drop pin" onClick={() => setPinOpen(true)}>
+            <PushPinOutlinedIcon />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="Use my location">
+          <IconButton aria-label="Use my location" onClick={handleUseMyLocation}>
+            <MyLocationIcon />
+          </IconButton>
+        </Tooltip>
       </Stack>
 
       <Dialog open={pinOpen} onClose={() => setPinOpen(false)} maxWidth="md">
