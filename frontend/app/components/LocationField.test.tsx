@@ -65,4 +65,31 @@ describe("LocationField", () => {
     );
     expect(String(fetchMock.mock.calls[0][0])).toContain("/api/reverse?");
   });
+
+  it("uses the browser geolocation and resolves the field", async () => {
+    const getCurrentPosition = vi.fn((success: PositionCallback) =>
+      success({ coords: { latitude: 40, longitude: -90 } } as GeolocationPosition),
+    );
+    Object.defineProperty(navigator, "geolocation", {
+      value: { getCurrentPosition },
+      configurable: true,
+    });
+    const fetchMock = vi.fn(async () =>
+      okJson({ result: { label: "My Spot", lat: 40, lng: -90 } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const onChange = vi.fn();
+
+    render(<LocationField label="Current" value={null} onChange={onChange} />);
+    await userEvent.click(screen.getByRole("button", { name: /my location/i }));
+
+    await waitFor(() =>
+      expect(onChange).toHaveBeenCalledWith({
+        label: "My Spot",
+        lat: 40,
+        lng: -90,
+      }),
+    );
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/api/reverse?");
+  });
 });

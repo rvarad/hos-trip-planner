@@ -40,7 +40,7 @@ and `<MapView>` (T6a).
   - Test (MapView mocked): firing `onPinPlaced` calls `GET /api/reverse` and then
     `onChange` with the resolved location (pin coords + label).
 
-- [ ] **T6b.3** Use my current location
+- [x] **T6b.3** Use my current location
   - A button reads `navigator.geolocation.getCurrentPosition`, reverse-geocodes the
     coords, and resolves the field.
   - Test (geolocation + fetch mocked): the resolved location is set via `onChange`.

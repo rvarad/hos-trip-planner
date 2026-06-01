@@ -59,13 +59,24 @@ export default function LocationField({
     return () => clearTimeout(timer);
   }, [input, mapCenter]);
 
-  async function handlePin(lat: number, lng: number) {
-    setPin({ lat, lng });
+  async function resolveCoords(lat: number, lng: number) {
     const resolved = await reverseGeocode(lat, lng);
     onChange(
       resolved ?? { label: `${lat.toFixed(4)}, ${lng.toFixed(4)}`, lat, lng },
     );
+  }
+
+  async function handlePin(lat: number, lng: number) {
+    setPin({ lat, lng });
+    await resolveCoords(lat, lng);
     setPinOpen(false);
+  }
+
+  function handleUseMyLocation() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition((pos) => {
+      resolveCoords(pos.coords.latitude, pos.coords.longitude);
+    });
   }
 
   return (
@@ -88,6 +99,7 @@ export default function LocationField({
           renderInput={(params) => <TextField {...params} label={label} />}
         />
         <Button onClick={() => setPinOpen(true)}>Drop pin</Button>
+        <Button onClick={handleUseMyLocation}>Use my location</Button>
       </Stack>
 
       <Dialog open={pinOpen} onClose={() => setPinOpen(false)} maxWidth="md">
