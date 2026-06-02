@@ -6,16 +6,27 @@ vi.mock("./LocationField", () => ({
   default: ({
     label,
     onChange,
+    onRequestPin,
   }: {
     label: string;
     onChange: (l: { label: string; lat: number; lng: number }) => void;
+    onRequestPin?: () => void;
   }) => (
-    <button onClick={() => onChange({ label, lat: 1, lng: 2 })}>
-      field:{label}
-    </button>
+    <div>
+      <button onClick={() => onChange({ label, lat: 1, lng: 2 })}>
+        field:{label}
+      </button>
+      <button onClick={() => onRequestPin?.()}>pin:{label}</button>
+    </div>
   ),
 }));
-vi.mock("./MapView", () => ({ default: () => <div data-testid="map" /> }));
+vi.mock("./MapView", () => ({
+  default: ({ onPinPlaced }: { onPinPlaced?: (lat: number, lng: number) => void }) => (
+    <div data-testid="map">
+      <button onClick={() => onPinPlaced?.(40, -90)}>map-pick</button>
+    </div>
+  ),
+}));
 
 import TripPlanner from "./TripPlanner";
 
@@ -97,6 +108,50 @@ describe("TripPlanner", () => {
 
     expect(await screen.findByText(/804\.57/)).toBeInTheDocument();
     expect(await screen.findByText(/approximate/i)).toBeInTheDocument();
+  });
+
+  it("sets a field from a map tap after arming it (tap-to-place)", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      if (String(url).includes("/api/reverse")) {
+        return okJson({ result: { label: "Tapped Place", lat: 40, lng: -90 } });
+      }
+      return okJson({
+        routing: "estimated",
+        segments: [{ status: "driving" }],
+        days: [],
+        total_miles: 5,
+        route: [],
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TripPlanner />);
+
+    // Arm the pickup field, then tap the map → reverse-geocode that point.
+    await userEvent.click(screen.getByText("pin:Pickup"));
+    await userEvent.click(screen.getByText("map-pick"));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some((c) => String(c[0]).includes("/api/reverse")),
+      ).toBe(true),
+    );
+
+    // The tapped, reverse-geocoded location becomes the pickup: it flows into
+    // the plan request body.
+    await userEvent.click(screen.getByText("field:Current location"));
+    await userEvent.click(screen.getByText("field:Drop-off"));
+    await userEvent.click(plan());
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some((c) => String(c[0]) === "/api/plan-trip"),
+      ).toBe(true),
+    );
+    const planCall = fetchMock.mock.calls.find(
+      (c) => String(c[0]) === "/api/plan-trip",
+    )!;
+    const body = JSON.parse((planCall[1] as RequestInit).body as string);
+    expect(body.pickup).toEqual({ label: "Tapped Place", lat: 40, lng: -90 });
   });
 
   it("offers a Map/Daily Logs toggle and renders log sheets when a plan has days", async () => {

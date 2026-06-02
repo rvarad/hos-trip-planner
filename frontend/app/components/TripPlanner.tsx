@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -15,8 +15,15 @@ import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 import LocationField from "./LocationField";
 import MapView, { type MapMarker } from "./MapView";
 import DailyLogSheet, { type DutySegment } from "./DailyLogSheet";
-import { type ResolvedLocation } from "../lib/geocoding";
+import { reverseGeocode, type ResolvedLocation } from "../lib/geocoding";
 import { markersFromSegments, type PlanSegment } from "../lib/tripMarkers";
+
+type FieldKey = "current" | "pickup" | "dropoff";
+const PICK_LABELS: Record<FieldKey, string> = {
+  current: "current location",
+  pickup: "pickup",
+  dropoff: "drop-off",
+};
 
 interface DayLog {
   date_offset: number;
@@ -64,6 +71,38 @@ export default function TripPlanner() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"map" | "logs">("map");
+  const [armedField, setArmedField] = useState<FieldKey | null>(null);
+
+  const setterFor: Record<FieldKey, (l: ResolvedLocation | null) => void> = {
+    current: setCurrent,
+    pickup: setPickup,
+    dropoff: setDropoff,
+  };
+
+  function armField(field: FieldKey) {
+    setArmedField(field);
+    setView("map"); // make sure the map is visible to tap on
+  }
+
+  async function handleMapPick(lat: number, lng: number) {
+    const field = armedField;
+    if (!field) return;
+    setArmedField(null);
+    const resolved = await reverseGeocode(lat, lng);
+    setterFor[field](
+      resolved ?? { label: `${lat.toFixed(4)}, ${lng.toFixed(4)}`, lat, lng },
+    );
+  }
+
+  // Esc cancels an in-progress map pick.
+  useEffect(() => {
+    if (!armedField) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setArmedField(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [armedField]);
 
   const cycleNum = Number(cycleHours);
   const cycleValid = cycleHours !== "" && !isNaN(cycleNum) && cycleNum >= 0 && cycleNum <= 70;
@@ -149,19 +188,37 @@ export default function TripPlanner() {
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <FieldDot color="#38bdf8" />
             <Box sx={{ flexGrow: 1 }}>
-              <LocationField label="Current location" value={current} onChange={setCurrent} />
+              <LocationField
+                label="Current location"
+                value={current}
+                onChange={setCurrent}
+                onRequestPin={() => armField("current")}
+                picking={armedField === "current"}
+              />
             </Box>
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <FieldDot color="#22c55e" />
             <Box sx={{ flexGrow: 1 }}>
-              <LocationField label="Pickup" value={pickup} onChange={setPickup} />
+              <LocationField
+                label="Pickup"
+                value={pickup}
+                onChange={setPickup}
+                onRequestPin={() => armField("pickup")}
+                picking={armedField === "pickup"}
+              />
             </Box>
           </Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             <FieldDot color="#ef4444" square />
             <Box sx={{ flexGrow: 1 }}>
-              <LocationField label="Drop-off" value={dropoff} onChange={setDropoff} />
+              <LocationField
+                label="Drop-off"
+                value={dropoff}
+                onChange={setDropoff}
+                onRequestPin={() => armField("dropoff")}
+                picking={armedField === "dropoff"}
+              />
             </Box>
           </Box>
         </Stack>
@@ -233,7 +290,38 @@ export default function TripPlanner() {
           </ToggleButtonGroup>
         )}
 
-        <MapView markers={mapMarkers} route={planResult?.route} />
+        {armedField && (
+          <Box
+            sx={{
+              position: "absolute",
+              top: 12,
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 3,
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
+              bgcolor: "background.paper",
+              borderRadius: 2,
+              boxShadow: 3,
+              px: 2,
+              py: 0.75,
+            }}
+          >
+            <Typography variant="body2">
+              Tap the map to set the {PICK_LABELS[armedField]}
+            </Typography>
+            <Button size="small" onClick={() => setArmedField(null)}>
+              Cancel
+            </Button>
+          </Box>
+        )}
+
+        <MapView
+          markers={mapMarkers}
+          route={planResult?.route}
+          onPinPlaced={armedField ? handleMapPick : undefined}
+        />
 
         {view === "logs" && planResult && (
           <Box

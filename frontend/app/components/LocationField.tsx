@@ -2,11 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import Autocomplete from "@mui/material/Autocomplete";
-import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContent from "@mui/material/DialogContent";
-import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
@@ -14,7 +9,6 @@ import Tooltip from "@mui/material/Tooltip";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 import PushPinOutlinedIcon from "@mui/icons-material/PushPinOutlined";
 
-import MapView from "./MapView";
 import {
   reverseGeocode,
   searchLocations,
@@ -26,6 +20,10 @@ type LocationFieldProps = {
   value: ResolvedLocation | null;
   onChange: (location: ResolvedLocation | null) => void;
   mapCenter?: { lat: number; lng: number };
+  /** Ask the parent to start picking this field's location on the main map. */
+  onRequestPin?: () => void;
+  /** True while this field is armed for map picking (highlights the pin button). */
+  picking?: boolean;
 };
 
 export default function LocationField({
@@ -33,17 +31,14 @@ export default function LocationField({
   value,
   onChange,
   mapCenter,
+  onRequestPin,
+  picking,
 }: LocationFieldProps) {
   const [input, setInput] = useState("");
   const [options, setOptions] = useState<ResolvedLocation[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const latestRequest = useRef(0);
-
-  const [pinOpen, setPinOpen] = useState(false);
-  const [pin, setPin] = useState<{ lat: number; lng: number } | null>(
-    value ? { lat: value.lat, lng: value.lng } : null,
-  );
 
   useEffect(() => {
     const q = input.trim();
@@ -64,83 +59,68 @@ export default function LocationField({
     return () => clearTimeout(timer);
   }, [input, mapCenter]);
 
-  async function resolveCoords(lat: number, lng: number) {
-    const resolved = await reverseGeocode(lat, lng);
-    onChange(
-      resolved ?? { label: `${lat.toFixed(4)}, ${lng.toFixed(4)}`, lat, lng },
-    );
-  }
-
-  async function handlePin(lat: number, lng: number) {
-    setPin({ lat, lng });
-    await resolveCoords(lat, lng);
-    setPinOpen(false);
-  }
-
   function handleUseMyLocation() {
     if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition((pos) => {
-      resolveCoords(pos.coords.latitude, pos.coords.longitude);
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      const { latitude, longitude } = pos.coords;
+      const resolved = await reverseGeocode(latitude, longitude);
+      onChange(
+        resolved ?? {
+          label: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+          lat: latitude,
+          lng: longitude,
+        },
+      );
     });
   }
 
   return (
-    <>
-      <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-        <Autocomplete
-          sx={{ flexGrow: 1 }}
-          options={options}
-          value={value}
-          // Only show the dropdown once there's something to show (results or a
-          // pending search) — never an empty "No options" popup on a blank click.
-          open={open && (options.length > 0 || loading)}
-          onOpen={() => setOpen(true)}
-          onClose={() => setOpen(false)}
-          onChange={(_, newValue) => onChange(newValue)}
-          onInputChange={(_, newInput, reason) => {
-            if (reason === "input") setInput(newInput);
-          }}
-          filterOptions={(x) => x}
-          getOptionLabel={(option) => option.label}
-          isOptionEqualToValue={(option, selected) =>
-            option.lat === selected.lat && option.lng === selected.lng
-          }
-          loading={loading}
-          renderInput={(params) => <TextField {...params} label={label} />}
-          renderOption={(props, option) => {
-            // Photon can return several results with the same label, so key on
-            // the coordinates instead of the (non-unique) label.
-            const { key: _key, ...rest } = props;
-            return (
-              <li {...rest} key={`${option.lat},${option.lng}`}>
-                {option.label}
-              </li>
-            );
-          }}
-        />
-        <Tooltip title="Drop pin">
-          <IconButton aria-label="Drop pin" onClick={() => setPinOpen(true)}>
-            <PushPinOutlinedIcon />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="Use my location">
-          <IconButton aria-label="Use my location" onClick={handleUseMyLocation}>
-            <MyLocationIcon />
-          </IconButton>
-        </Tooltip>
-      </Stack>
-
-      <Dialog open={pinOpen} onClose={() => setPinOpen(false)} maxWidth="md">
-        <DialogTitle>Drop a pin</DialogTitle>
-        <DialogContent>
-          <div style={{ width: 520, maxWidth: "80vw", height: 400 }}>
-            <MapView pin={pin} onPinPlaced={handlePin} fitToMarkers={false} />
-          </div>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPinOpen(false)}>Cancel</Button>
-        </DialogActions>
-      </Dialog>
-    </>
+    <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+      <Autocomplete
+        sx={{ flexGrow: 1 }}
+        options={options}
+        value={value}
+        // Only show the dropdown once there's something to show (results or a
+        // pending search) — never an empty "No options" popup on a blank click.
+        open={open && (options.length > 0 || loading)}
+        onOpen={() => setOpen(true)}
+        onClose={() => setOpen(false)}
+        onChange={(_, newValue) => onChange(newValue)}
+        onInputChange={(_, newInput, reason) => {
+          if (reason === "input") setInput(newInput);
+        }}
+        filterOptions={(x) => x}
+        getOptionLabel={(option) => option.label}
+        isOptionEqualToValue={(option, selected) =>
+          option.lat === selected.lat && option.lng === selected.lng
+        }
+        loading={loading}
+        renderInput={(params) => <TextField {...params} label={label} />}
+        renderOption={(props, option) => {
+          // Photon can return several results with the same label, so key on
+          // the coordinates instead of the (non-unique) label.
+          const { key: _key, ...rest } = props;
+          return (
+            <li {...rest} key={`${option.lat},${option.lng}`}>
+              {option.label}
+            </li>
+          );
+        }}
+      />
+      <Tooltip title="Drop pin (tap the map)">
+        <IconButton
+          aria-label="Drop pin"
+          color={picking ? "primary" : "default"}
+          onClick={onRequestPin}
+        >
+          <PushPinOutlinedIcon />
+        </IconButton>
+      </Tooltip>
+      <Tooltip title="Use my location">
+        <IconButton aria-label="Use my location" onClick={handleUseMyLocation}>
+          <MyLocationIcon />
+        </IconButton>
+      </Tooltip>
+    </Stack>
   );
 }
