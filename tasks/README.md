@@ -16,7 +16,7 @@
 | T9  | Multi-day log slicing at midnight          | done        |
 | T10 | Map display with route + markers           | done        |
 | T11 | Polish                                     | in progress |
-| T12 | Deploy                                     | not started |
+| T12 | Deploy                                     | in progress |
 | T13 | Loom recording                             | not started |
 | T14 | Log the 10-hour rest as sleeper berth      | done        |
 

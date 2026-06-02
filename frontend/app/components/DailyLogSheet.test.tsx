@@ -92,4 +92,53 @@ describe("DailyLogSheet", () => {
       expect(screen.getAllByText("10.00").length).toBe(2);   // Driving & On Duty
     });
   });
+
+  describe("filled-out form fields", () => {
+    const chicago = { label: "Chicago, IL", lat: 41.8781, lng: -87.6298 };
+    const joliet = { label: "Joliet, IL", lat: 41.525, lng: -88.0817 };
+    const filledSegments: DutySegment[] = [
+      {
+        start_min: 480,
+        end_min: 600,
+        status: "driving",
+        description: "Drive to pickup",
+        start_location: chicago,
+        end_location: joliet,
+        miles: 60,
+      },
+      {
+        start_min: 600,
+        end_min: 660,
+        status: "on_duty_not_driving",
+        description: "Pickup",
+        start_location: joliet,
+        end_location: joliet,
+        miles: 0,
+      },
+    ];
+
+    it("renders the form header with day, date, from/to and miles", () => {
+      render(
+        <DailyLogSheet segments={filledSegments} dayNumber={1} date="06 / 02 / 2026" />,
+      );
+      expect(screen.getByText("Driver's Daily Log")).toBeInTheDocument();
+      expect(screen.getByText("Day 1")).toBeInTheDocument();
+      expect(screen.getByText("06 / 02 / 2026")).toBeInTheDocument();
+      expect(screen.getByText(/Chicago, IL/)).toBeInTheDocument(); // From
+      expect(screen.getAllByText(/Joliet, IL/).length).toBeGreaterThan(0); // To + remarks
+      expect(screen.getAllByText("60.0").length).toBeGreaterThan(0); // miles fields
+    });
+
+    it("lists duty changes in Remarks with their times", () => {
+      render(<DailyLogSheet segments={filledSegments} dayNumber={1} />);
+      expect(screen.getByText("Remarks")).toBeInTheDocument();
+      expect(screen.getByText("10:00")).toBeInTheDocument(); // 600 min => 10:00
+      expect(screen.getByText(/Pickup — Joliet, IL/)).toBeInTheDocument();
+    });
+
+    it("shows the on-duty recap", () => {
+      render(<DailyLogSheet segments={filledSegments} dayNumber={1} />);
+      expect(screen.getByText(/On-duty hours today/)).toBeInTheDocument();
+    });
+  });
 });

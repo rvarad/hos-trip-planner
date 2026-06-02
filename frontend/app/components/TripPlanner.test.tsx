@@ -25,17 +25,23 @@ vi.mock("./MapView", () => ({
     onPinPlaced,
     focusPoint,
     fitSignal,
+    highlightDay,
+    onDaySelect,
   }: {
     onPinPlaced?: (lat: number, lng: number) => void;
     focusPoint?: { lat: number; lng: number } | null;
     fitSignal?: number;
+    highlightDay?: number | null;
+    onDaySelect?: (offset: number) => void;
   }) => (
     <div
       data-testid="map"
       data-focus={focusPoint ? `${focusPoint.lat},${focusPoint.lng}` : ""}
       data-fit={String(fitSignal ?? 0)}
+      data-highlight={highlightDay == null ? "" : String(highlightDay)}
     >
       <button onClick={() => onPinPlaced?.(40, -90)}>map-pick</button>
+      <button onClick={() => onDaySelect?.(1)}>map-day-1</button>
     </div>
   ),
 }));
@@ -107,7 +113,7 @@ describe("TripPlanner", () => {
     await userEvent.click(plan());
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("/api/plan-trip");
     const body = JSON.parse(init.body as string);
     expect(body.current_location).toEqual({
@@ -120,6 +126,38 @@ describe("TripPlanner", () => {
 
     expect(await screen.findByText(/804\.57/)).toBeInTheDocument();
     expect(await screen.findByText(/approximate/i)).toBeInTheDocument();
+  });
+
+  it("renders an enriched trip summary (drive time, stops, ETA, restart)", async () => {
+    const loc = { label: "X", lat: 0, lng: 0 };
+    const fetchMock = vi.fn(async () =>
+      okJson({
+        routing: "osrm",
+        segments: [
+          { start_min: 480, end_min: 600, status: "driving", description: "Drive", start_location: loc, end_location: loc, miles: 100 },
+          { start_min: 600, end_min: 660, status: "on_duty_not_driving", description: "Pickup", start_location: loc, end_location: loc, miles: 0 },
+          { start_min: 660, end_min: 900, status: "driving", description: "Drive", start_location: loc, end_location: loc, miles: 200 },
+          { start_min: 900, end_min: 2940, status: "off_duty", description: "34-hour restart", start_location: loc, end_location: loc, miles: 0 },
+          { start_min: 2940, end_min: 3000, status: "on_duty_not_driving", description: "Drop-off", start_location: loc, end_location: loc, miles: 0 },
+        ],
+        days: [{ date_offset: 0, segments: [] }],
+        total_miles: 300,
+        route: [],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TripPlanner />);
+    await resolveAll();
+    await userEvent.click(plan());
+
+    // drive time = (600-480) + (900-660) = 360 min = 6h (stat value)
+    expect(await screen.findByText("6h")).toBeInTheDocument();
+    // pickup + restart + drop-off = 3 stops (stat value)
+    expect(screen.getByText("3")).toBeInTheDocument();
+    // ETA = start 08:00 (480) + 2940 = 3420 => Day 3 · 09:00
+    expect(screen.getByText(/Arrives Day 3 · 09:00/)).toBeInTheDocument();
+    expect(screen.getByText(/restart required/i)).toBeInTheDocument();
   });
 
   it("sets a field from a map tap after arming it (tap-to-place)", async () => {
@@ -161,8 +199,8 @@ describe("TripPlanner", () => {
     );
     const planCall = fetchMock.mock.calls.find(
       (c) => String(c[0]) === "/api/plan-trip",
-    )!;
-    const body = JSON.parse((planCall[1] as RequestInit).body as string);
+    )! as unknown as [string, RequestInit];
+    const body = JSON.parse(planCall[1].body as string);
     expect(body.pickup).toEqual({ label: "Tapped Place", lat: 40, lng: -90 });
   });
 
@@ -215,6 +253,31 @@ describe("TripPlanner", () => {
     await waitFor(() => expect(cycle).toBeEnabled());
   });
 
+  it("shows a processing overlay on the map while a plan is in flight", async () => {
+    let resolveFetch: (r: Response) => void = () => {};
+    const fetchMock = vi.fn(
+      () => new Promise<Response>((res) => (resolveFetch = res)),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TripPlanner />);
+    await resolveAll();
+    expect(screen.queryByRole("progressbar")).not.toBeInTheDocument();
+
+    await userEvent.click(plan());
+    await waitFor(() =>
+      expect(screen.getByRole("progressbar")).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/planning route/i)).toBeInTheDocument();
+
+    resolveFetch(
+      okJson({ routing: "estimated", segments: [], days: [], total_miles: 0, route: [] }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("progressbar")).not.toBeInTheDocument(),
+    );
+  });
+
   it("marks the plan stale when an input changes after planning", async () => {
     const fetchMock = vi.fn(async () =>
       okJson({
@@ -230,7 +293,7 @@ describe("TripPlanner", () => {
     render(<TripPlanner />);
     await resolveAll();
     await userEvent.click(plan());
-    expect(await screen.findByText(/100\.00 miles/)).toBeInTheDocument();
+    expect(await screen.findByText("100.00")).toBeInTheDocument();
     // Not stale right after planning.
     expect(screen.queryByText(/re-plan/i)).not.toBeInTheDocument();
 
@@ -239,6 +302,93 @@ describe("TripPlanner", () => {
     await userEvent.clear(cycle);
     await userEvent.type(cycle, "5");
     expect(await screen.findByText(/re-plan/i)).toBeInTheDocument();
+  });
+
+  it("returns to the map view when an input changes while viewing logs", async () => {
+    const fetchMock = vi.fn(async () =>
+      okJson({
+        routing: "osrm",
+        segments: [{ status: "driving" }],
+        days: [
+          {
+            date_offset: 0,
+            segments: [
+              { start_min: 480, end_min: 600, status: "driving", miles: 250 },
+            ],
+          },
+        ],
+        total_miles: 100,
+        route: [],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TripPlanner />);
+    await resolveAll();
+    await userEvent.click(plan());
+
+    // Switch to the logs view (its sheet rows are visible).
+    await userEvent.click(await screen.findByRole("button", { name: /daily logs/i }));
+    expect((await screen.findAllByText("Driving")).length).toBeGreaterThan(0);
+
+    // Changing a location should bounce back to the map (logs unmount).
+    await userEvent.click(screen.getByText("field:Pickup"));
+    await waitFor(() =>
+      expect(screen.queryByText("Sleeper Berth")).not.toBeInTheDocument(),
+    );
+  });
+
+  const twoDayPlan = () =>
+    okJson({
+      routing: "osrm",
+      segments: [{ status: "driving" }],
+      days: [
+        {
+          date_offset: 0,
+          segments: [{ start_min: 480, end_min: 600, status: "driving", miles: 250 }],
+        },
+        {
+          date_offset: 1,
+          segments: [{ start_min: 0, end_min: 120, status: "driving", miles: 100 }],
+        },
+      ],
+      total_miles: 350,
+      route: [
+        [0, 0],
+        [0, 1],
+        [0, 2],
+      ],
+    });
+
+  it("highlights a day on the map when its log card is clicked", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => twoDayPlan()));
+    render(<TripPlanner />);
+    await resolveAll();
+    await userEvent.click(plan());
+
+    // Go to logs, then click the Day 2 card.
+    await userEvent.click(await screen.findByRole("button", { name: /daily logs/i }));
+    await userEvent.click(await screen.findByText("Day 2"));
+
+    // Back on the map, with that day handed to MapView as the highlight.
+    await waitFor(() =>
+      expect(screen.queryByText("Sleeper Berth")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByTestId("map")).toHaveAttribute("data-highlight", "1");
+  });
+
+  it("opens the logs for a day when its route segment is clicked on the map", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => twoDayPlan()));
+    render(<TripPlanner />);
+    await resolveAll();
+    await userEvent.click(plan());
+
+    // Map view: click a day's route segment (mock fires onDaySelect(1)).
+    await userEvent.click(await screen.findByText("map-day-1"));
+
+    // The logs open (sheet rows visible) with that day selected.
+    expect((await screen.findAllByText("Sleeper Berth")).length).toBeGreaterThan(0);
+    expect(screen.getByTestId("map")).toHaveAttribute("data-highlight", "1");
   });
 
   it("offers a Map/Daily Logs toggle and renders log sheets when a plan has days", async () => {
@@ -270,7 +420,7 @@ describe("TripPlanner", () => {
 
     // Switching to logs renders a DailyLogSheet (its row labels appear)...
     expect((await screen.findAllByText("Driving")).length).toBeGreaterThan(0);
-    // ...with that day's driven miles in the header.
-    expect(await screen.findByText(/250\.0 mi/)).toBeInTheDocument();
+    // ...with that day's driven miles in the form's mileage fields.
+    expect((await screen.findAllByText("250.0")).length).toBeGreaterThan(0);
   });
 });

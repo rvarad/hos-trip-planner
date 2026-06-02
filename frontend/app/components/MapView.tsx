@@ -19,6 +19,8 @@ import PlaceIcon from "@mui/icons-material/Place";
 import LocalGasStationIcon from "@mui/icons-material/LocalGasStation";
 import LocalCafeIcon from "@mui/icons-material/LocalCafe";
 import HotelIcon from "@mui/icons-material/Hotel";
+import { formatClock, formatDuration } from "../lib/format";
+import { type DayRoute } from "../lib/routeDays";
 
 const MAP_STYLE =
   process.env.NEXT_PUBLIC_MAP_STYLE_URL ??
@@ -39,23 +41,6 @@ export type MapMarker = {
   milesSoFar?: number;
 };
 
-function formatClock(totalMin: number): string {
-  const day = Math.floor(totalMin / 1440) + 1;
-  const minOfDay = ((totalMin % 1440) + 1440) % 1440;
-  const hh = String(Math.floor(minOfDay / 60)).padStart(2, "0");
-  const mm = String(minOfDay % 60).padStart(2, "0");
-  return `Day ${day} · ${hh}:${mm}`;
-}
-
-function formatDuration(min: number): string {
-  if (min >= 60) {
-    const h = Math.floor(min / 60);
-    const m = min % 60;
-    return m ? `${h}h ${m}m` : `${h}h`;
-  }
-  return `${min} min`;
-}
-
 // Semantic marker palette + icon. "#38bdf8" matches the theme accent. This is
 // the single source of truth for marker colors, icons, and legend labels.
 const KIND_META: Record<
@@ -72,6 +57,10 @@ const KIND_META: Record<
 
 const KIND_ORDER = ["current", "pickup", "dropoff", "fuel", "break", "rest"];
 
+// The route is drawn in one accent color; days are distinguished on hover
+// (T11.12) rather than by per-day colors.
+const ROUTE_COLOR = "#38bdf8";
+
 function metaFor(kind: string) {
   return KIND_META[kind] ?? KIND_META.current;
 }
@@ -82,6 +71,13 @@ type MapViewProps = {
   route?: [number, number][];
   /** Draw the route muted/dashed to signal it's stale (inputs changed). */
   routeDimmed?: boolean;
+  /** Route split into per-day slices; when present and not dimmed, the route is
+   *  drawn per day and each day's segment is hoverable (overrides `route`). */
+  routeDays?: DayRoute[];
+  /** Persistently emphasize this day's route + fit the camera to it (logs link). */
+  highlightDay?: number | null;
+  /** Called with a day's offset when its route segment is clicked. */
+  onDaySelect?: (dateOffset: number) => void;
   /** Fly to this point when it changes (focus the most recently set location). */
   focusPoint?: { lat: number; lng: number } | null;
   /** When this number changes, fit the camera to all markers (e.g. on Plan). */
@@ -98,6 +94,9 @@ export default function MapView({
   markers,
   route,
   routeDimmed = false,
+  routeDays,
+  highlightDay,
+  onDaySelect,
   focusPoint,
   fitSignal = 0,
   pin,
@@ -107,9 +106,21 @@ export default function MapView({
 }: MapViewProps) {
   const mapRef = useRef<MapRef>(null);
   const [selected, setSelected] = useState<MapMarker | null>(null);
+  // The day whose route segment is under the cursor (with the cursor position).
+  const [hoveredDay, setHoveredDay] = useState<{
+    dateOffset: number;
+    lng: number;
+    lat: number;
+  } | null>(null);
 
   // Close any open popup when the marker set changes (re-plan, focus, etc.).
-  useEffect(() => setSelected(null), [markers]);
+  // Adjusted during render — the React-recommended alternative to a setState
+  // effect (avoids the cascading-render lint rule).
+  const [prevMarkers, setPrevMarkers] = useState(markers);
+  if (markers !== prevMarkers) {
+    setPrevMarkers(markers);
+    setSelected(null);
+  }
 
   // Focus-newest: fly to the location the user just set/edited.
   useEffect(() => {
@@ -141,10 +152,37 @@ export default function MapView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitSignal]);
 
+  // When a day is selected (from the logs), frame that day's route segment.
+  useEffect(() => {
+    if (highlightDay == null) return;
+    const map = mapRef.current;
+    const d = routeDays?.find((x) => x.dateOffset === highlightDay);
+    if (!map || !d || d.coords.length < 2) return;
+    const lngs = d.coords.map((c) => c[0]);
+    const lats = d.coords.map((c) => c[1]);
+    map.fitBounds(
+      [
+        [Math.min(...lngs), Math.min(...lats)],
+        [Math.max(...lngs), Math.max(...lats)],
+      ],
+      { padding: 80, maxZoom: 9, duration: 800 },
+    );
+    // routeDays is read intentionally only when highlightDay changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightDay]);
+
   // Legend lists only the kinds actually on the map, in a stable order.
   const presentKinds = KIND_ORDER.filter((k) =>
     markers?.some((m) => m.kind === k),
   );
+
+  // Per-day route slices are drawn (and hoverable) only for a fresh plan.
+  // Hover is disabled while placing a pin (the map is in crosshair mode).
+  const showDayRoutes = !!routeDays && routeDays.length > 0 && !routeDimmed;
+  const dayLayerIds =
+    showDayRoutes && !onPinPlaced
+      ? routeDays!.map((d) => `route-day-line-${d.dateOffset}`)
+      : [];
 
   return (
     <Map
@@ -152,37 +190,92 @@ export default function MapView({
       initialViewState={{ longitude: -98.5795, latitude: 39.8283, zoom: 3.5 }}
       mapStyle={MAP_STYLE}
       style={{ width: "100%", height: "100%" }}
-      cursor={onPinPlaced ? "crosshair" : undefined}
-      onClick={
-        onPinPlaced
-          ? (e: MapLayerMouseEvent) => onPinPlaced(e.lngLat.lat, e.lngLat.lng)
+      cursor={onPinPlaced ? "crosshair" : hoveredDay ? "pointer" : undefined}
+      interactiveLayerIds={dayLayerIds}
+      onClick={(e: MapLayerMouseEvent) => {
+        if (onPinPlaced) {
+          onPinPlaced(e.lngLat.lat, e.lngLat.lng);
+          return;
+        }
+        const id = e.features?.[0]?.layer?.id;
+        if (id && id.startsWith("route-day-line-") && onDaySelect) {
+          onDaySelect(Number(id.slice("route-day-line-".length)));
+        }
+      }}
+      onMouseMove={
+        dayLayerIds.length
+          ? (e: MapLayerMouseEvent) => {
+              const id = e.features?.[0]?.layer?.id;
+              if (id && id.startsWith("route-day-line-")) {
+                setHoveredDay({
+                  dateOffset: Number(id.slice("route-day-line-".length)),
+                  lng: e.lngLat.lng,
+                  lat: e.lngLat.lat,
+                });
+              } else if (hoveredDay) {
+                setHoveredDay(null);
+              }
+            }
           : undefined
       }
+      onMouseLeave={hoveredDay ? () => setHoveredDay(null) : undefined}
     >
       {showOverlays && <NavigationControl position="top-right" />}
-      {route && route.length >= 2 && (
-        <Source
-          id="route"
-          type="geojson"
-          data={{
-            type: "Feature",
-            properties: {},
-            geometry: { type: "LineString", coordinates: route },
-          }}
-        >
-          <Layer
-            id="route-line"
-            type="line"
-            layout={{ "line-join": "round", "line-cap": "round" }}
-            paint={{
-              "line-color": routeDimmed ? "#64748b" : "#38bdf8",
-              "line-width": 4,
-              "line-opacity": routeDimmed ? 0.35 : 0.85,
-              ...(routeDimmed ? { "line-dasharray": [2, 2] } : {}),
-            }}
-          />
-        </Source>
-      )}
+      {showDayRoutes
+        ? routeDays!.map((d) => {
+            if (d.coords.length < 2) return null;
+            // A day is emphasized when hovered, or persistently when selected.
+            const emphasizedDay = hoveredDay?.dateOffset ?? highlightDay ?? null;
+            const isHovered = emphasizedDay === d.dateOffset;
+            const dimOthers = emphasizedDay != null && !isHovered;
+            return (
+              <Source
+                key={d.dateOffset}
+                id={`route-day-${d.dateOffset}`}
+                type="geojson"
+                data={{
+                  type: "Feature",
+                  properties: {},
+                  geometry: { type: "LineString", coordinates: d.coords },
+                }}
+              >
+                <Layer
+                  id={`route-day-line-${d.dateOffset}`}
+                  type="line"
+                  layout={{ "line-join": "round", "line-cap": "round" }}
+                  paint={{
+                    "line-color": ROUTE_COLOR,
+                    "line-width": isHovered ? 7 : 4,
+                    "line-opacity": dimOthers ? 0.45 : 0.9,
+                  }}
+                />
+              </Source>
+            );
+          })
+        : route &&
+          route.length >= 2 && (
+            <Source
+              id="route"
+              type="geojson"
+              data={{
+                type: "Feature",
+                properties: {},
+                geometry: { type: "LineString", coordinates: route },
+              }}
+            >
+              <Layer
+                id="route-line"
+                type="line"
+                layout={{ "line-join": "round", "line-cap": "round" }}
+                paint={{
+                  "line-color": routeDimmed ? "#64748b" : ROUTE_COLOR,
+                  "line-width": 4,
+                  "line-opacity": routeDimmed ? 0.35 : 0.85,
+                  ...(routeDimmed ? { "line-dasharray": [2, 2] } : {}),
+                }}
+              />
+            </Source>
+          )}
       {pin && (
         <Marker
           longitude={pin.lng}
@@ -256,6 +349,31 @@ export default function MapView({
           </div>
         </Popup>
       )}
+
+      {hoveredDay &&
+        (() => {
+          const d = routeDays?.find((x) => x.dateOffset === hoveredDay.dateOffset);
+          if (!d) return null;
+          return (
+            <Popup
+              longitude={hoveredDay.lng}
+              latitude={hoveredDay.lat}
+              offset={12}
+              closeButton={false}
+              closeOnClick={false}
+            >
+              <div style={{ font: "12px/1.5 sans-serif", color: "#111", minWidth: 120 }}>
+                <div style={{ fontWeight: 700, marginBottom: 2 }}>
+                  Day {d.dateOffset + 1}
+                </div>
+                {d.miles != null && <div>{Math.round(d.miles)} mi driven</div>}
+                {d.driveMinutes != null && (
+                  <div>{formatDuration(d.driveMinutes)} drive</div>
+                )}
+              </div>
+            </Popup>
+          );
+        })()}
 
       {showOverlays && presentKinds.length > 0 && (
         <div

@@ -2,11 +2,29 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("react-map-gl/maplibre", () => ({
-  default: ({ children, onClick }: any) => (
+  default: ({ children, onClick, onMouseMove, onMouseLeave }: any) => (
     <div
       data-testid="map"
       onClick={() => onClick?.({ lngLat: { lng: -90, lat: 40 } })}
     >
+      {/* Test affordances to simulate maplibre's interactive-layer hover. */}
+      <button
+        data-testid="hover-day-1"
+        onClick={(e) => {
+          e.stopPropagation();
+          onMouseMove?.({
+            features: [{ layer: { id: "route-day-line-1" } }],
+            lngLat: { lng: -90, lat: 40 },
+          });
+        }}
+      />
+      <button
+        data-testid="hover-off"
+        onClick={(e) => {
+          e.stopPropagation();
+          onMouseLeave?.();
+        }}
+      />
       {children}
     </div>
   ),
@@ -144,5 +162,57 @@ describe("MapView", () => {
   it("renders no route line when no route is given", () => {
     render(<MapView />);
     expect(screen.queryByTestId("source")).not.toBeInTheDocument();
+  });
+
+  it("draws one route layer per day", () => {
+    render(
+      <MapView
+        routeDays={[
+          { dateOffset: 0, coords: [[0, 0], [0, 1]] },
+          { dateOffset: 1, coords: [[0, 1], [0, 2]] },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId("layer-route-day-line-0")).toBeInTheDocument();
+    expect(screen.getByTestId("layer-route-day-line-1")).toBeInTheDocument();
+    // The single combined line is not used when per-day slices are given.
+    expect(screen.queryByTestId("layer-route-line")).not.toBeInTheDocument();
+  });
+
+  it("shows a day-info popup on hovering a day's route segment", () => {
+    render(
+      <MapView
+        routeDays={[
+          { dateOffset: 0, coords: [[0, 0], [0, 1]], miles: 100, driveMinutes: 120 },
+          { dateOffset: 1, coords: [[0, 1], [0, 2]], miles: 250, driveMinutes: 240 },
+        ]}
+      />,
+    );
+    expect(screen.queryByTestId("popup")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("hover-day-1"));
+    expect(screen.getByTestId("popup")).toBeInTheDocument();
+    expect(screen.getByText("Day 2")).toBeInTheDocument();
+    expect(screen.getByText(/250 mi driven/)).toBeInTheDocument();
+    expect(screen.getByText(/4h drive/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("hover-off"));
+    expect(screen.queryByTestId("popup")).not.toBeInTheDocument();
+  });
+
+  it("falls back to the single dimmed line for a stale route", () => {
+    render(
+      <MapView
+        routeDimmed
+        route={[[0, 0], [0, 2]]}
+        routeDays={[
+          { dateOffset: 0, coords: [[0, 0], [0, 1]] },
+          { dateOffset: 1, coords: [[0, 1], [0, 2]] },
+        ]}
+      />,
+    );
+    // Dimmed: per-day coloring is suppressed; the single route line is drawn.
+    expect(screen.getByTestId("layer-route-line")).toBeInTheDocument();
+    expect(screen.queryByTestId("layer-route-day-line-0")).not.toBeInTheDocument();
   });
 });
