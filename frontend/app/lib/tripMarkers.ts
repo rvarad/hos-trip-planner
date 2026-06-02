@@ -1,5 +1,13 @@
 import { type MapMarker } from "../components/MapView";
 
+/** HOS headroom (minutes remaining) at a segment's end. */
+export interface HosClocks {
+  drive_remaining_min: number;
+  window_remaining_min: number;
+  break_remaining_min: number;
+  cycle_remaining_min: number;
+}
+
 /** A timeline segment from the plan-trip response (richer than the log sheet's). */
 export interface PlanSegment {
   start_min: number;
@@ -9,6 +17,7 @@ export interface PlanSegment {
   start_location?: { label: string; lat: number; lng: number };
   end_location?: { label: string; lat: number; lng: number };
   miles: number;
+  clocks?: HosClocks | null;
 }
 
 // Map each engine stop description to a marker kind (colored in MapView). Driving

@@ -366,9 +366,11 @@ describe("TripPlanner", () => {
     await resolveAll();
     await userEvent.click(plan());
 
-    // Go to logs, then click the Day 2 card.
+    // Go to logs, then click the Day 2 card. ("Day 2" also appears in the panel
+    // itinerary, so target the last match — the log card in the logs overlay.)
     await userEvent.click(await screen.findByRole("button", { name: /daily logs/i }));
-    await userEvent.click(await screen.findByText("Day 2"));
+    const day2 = await screen.findAllByText("Day 2");
+    await userEvent.click(day2[day2.length - 1]);
 
     // Back on the map, with that day handed to MapView as the highlight.
     await waitFor(() =>

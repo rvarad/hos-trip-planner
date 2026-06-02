@@ -421,3 +421,40 @@ def test_slice_days_conserves_duration_and_miles():
     assert abs(total_miles - 100.0) < 1e-9
     # Every day-local time stays within a calendar day.
     assert all(0 <= s.start_min < s.end_min <= 1440 for d in days for s in d.segments)
+
+
+def test_segments_carry_hos_clock_snapshots():
+    # Leg 1 is 270 min of driving and trips no limit, so it is one DRIVING
+    # segment; its clocks reflect 270 min spent against the period/window.
+    result = plan_trip(
+        TripInput(legs=_sample_legs(), current_cycle_used_minutes=0, start_time_minutes=0)
+    )
+    assert all(seg.clocks is not None for seg in result.segments)
+
+    first = result.segments[0]
+    assert first.status == DutyStatus.DRIVING
+    assert first.clocks.drive_remaining_min == 11 * 60 - 270
+    assert first.clocks.window_remaining_min == 14 * 60 - 270
+    assert first.clocks.break_remaining_min == 8 * 60 - 270
+    assert first.clocks.cycle_remaining_min == 70 * 60 - 270
+
+    # The pickup is an on-duty stop (>= 30 min): it resets the break clock and
+    # consumes window + cycle (270 drive + 60 pickup).
+    pickup = result.segments[1]
+    assert pickup.description == "Pickup"
+    assert pickup.clocks.break_remaining_min == 8 * 60
+    assert pickup.clocks.window_remaining_min == 14 * 60 - 330
+    assert pickup.clocks.cycle_remaining_min == 70 * 60 - 330
+
+
+def test_clocks_reset_after_a_ten_hour_rest():
+    # A 15-hour drive forces a 10-hour reset; its snapshot shows the 11h/14h
+    # clocks back to full.
+    legs = [RouteLeg(start=CHICAGO, end=DALLAS, distance_miles=1000.0, duration_minutes=900)]
+    result = plan_trip(
+        TripInput(legs=legs, current_cycle_used_minutes=0, start_time_minutes=0)
+    )
+    rests = [s for s in result.segments if s.description == "10-hour rest"]
+    assert rests, "expected at least one 10-hour reset on a 15-hour drive"
+    assert rests[0].clocks.drive_remaining_min == 11 * 60
+    assert rests[0].clocks.window_remaining_min == 14 * 60

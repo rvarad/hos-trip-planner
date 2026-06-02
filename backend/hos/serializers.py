@@ -25,6 +25,15 @@ class PlanTripRequestSerializer(serializers.Serializer):
     start_time_minutes = serializers.IntegerField(min_value=0, max_value=1439, default=0)
 
 
+class HosClocksSerializer(serializers.Serializer):
+    """Remaining-minutes HOS snapshot at a segment's end (engine `HosClocks`)."""
+
+    drive_remaining_min = serializers.IntegerField()
+    window_remaining_min = serializers.IntegerField()
+    break_remaining_min = serializers.IntegerField()
+    cycle_remaining_min = serializers.IntegerField()
+
+
 class DutySegmentSerializer(serializers.Serializer):
     """One timeline segment from the engine's `DutySegment` dataclass."""
 
@@ -35,6 +44,7 @@ class DutySegmentSerializer(serializers.Serializer):
     start_location = LocationSerializer()
     end_location = LocationSerializer()
     miles = serializers.FloatField()
+    clocks = HosClocksSerializer(required=False, allow_null=True)
 
 
 class DayLogSerializer(serializers.Serializer):

@@ -86,12 +86,29 @@ class DriverState:
 
 
 @dataclass(frozen=True)
+class HosClocks:
+    """A snapshot of the driver's HOS headroom at the END of a segment.
+
+    Each field is the integer minutes *remaining* before that limit is hit,
+    floored at 0: drive time left in the 11h period, time left in the 14h window,
+    drive time left before the 30-min break is due, and on-duty time left in the
+    70h/8-day cycle. Lets the UI show "how much is left" at each stop.
+    """
+
+    drive_remaining_min: int
+    window_remaining_min: int
+    break_remaining_min: int
+    cycle_remaining_min: int
+
+
+@dataclass(frozen=True)
 class DutySegment:
     """One stretch of the timeline in a single duty status.
 
     `start_min`/`end_min` are integer minutes from trip start. `status` is a
     `DutyStatus`. Non-driving segments use `miles=0.0` and have
-    `start_location == end_location`.
+    `start_location == end_location`. `clocks` is the HOS headroom at the
+    segment's end (None for synthesized off-duty fill in `slice_days`).
     """
 
     start_min: int
@@ -101,6 +118,7 @@ class DutySegment:
     start_location: Location
     end_location: Location
     miles: float
+    clocks: HosClocks | None = None
 
 
 @dataclass(frozen=True)
@@ -159,6 +177,7 @@ def slice_days(
                     start_location=seg.start_location,
                     end_location=seg.end_location,
                     miles=seg.miles * (piece_end - cursor) / seg_duration,
+                    clocks=seg.clocks,
                 )
             )
             cursor = piece_end
@@ -211,6 +230,16 @@ def rolling_cycle_minutes(
     """
     start = max(0, day_index - cycle_days + 1)
     return sum(daily_on_duty_minutes[start : day_index + 1])
+
+
+def _clocks(state: DriverState) -> HosClocks:
+    """Snapshot the remaining HOS headroom from the current driver state."""
+    return HosClocks(
+        drive_remaining_min=max(0, MAX_DRIVING_PER_PERIOD_MIN - state.driving_in_period),
+        window_remaining_min=max(0, MAX_DUTY_WINDOW_MIN - state.elapsed_in_window),
+        break_remaining_min=max(0, DRIVING_BEFORE_BREAK_MIN - state.driving_since_break),
+        cycle_remaining_min=max(0, MAX_CYCLE_ON_DUTY_MIN - state.on_duty_in_cycle),
+    )
 
 
 def _haversine_miles(a: tuple[float, float], b: tuple[float, float]) -> float:
@@ -324,6 +353,14 @@ def _drive_leg(
             drivable = min(drivable, max(1, int(minutes_to_fuel)))
 
         miles = leg.distance_miles * drivable / leg.duration_minutes
+        end_location = _point_in_leg(leg, leg.duration_minutes - remaining + drivable)
+        # Advance the clocks first, then snapshot the remaining headroom.
+        state.driving_in_period += drivable
+        state.elapsed_in_window += drivable
+        state.driving_since_break += drivable
+        state.on_duty_in_cycle += drivable
+        state.miles_since_fuel += miles
+        remaining -= drivable
         segments.append(
             DutySegment(
                 start_min=clock,
@@ -331,17 +368,12 @@ def _drive_leg(
                 status=DutyStatus.DRIVING,
                 description=f"Drive to {leg.end.label}",
                 start_location=here,
-                end_location=_point_in_leg(leg, leg.duration_minutes - remaining + drivable),
+                end_location=end_location,
                 miles=miles,
+                clocks=_clocks(state),
             )
         )
         clock += drivable
-        state.driving_in_period += drivable
-        state.elapsed_in_window += drivable
-        state.driving_since_break += drivable
-        state.on_duty_in_cycle += drivable
-        state.miles_since_fuel += miles
-        remaining -= drivable
 
     return clock
 
@@ -355,6 +387,9 @@ def _append_reset(
     rest in the berth. The rule only requires 10 consecutive hours off duty *or*
     sleeper (§ 395.3(a)(1)), so the clock effect is identical to off-duty.
     """
+    state.driving_in_period = 0
+    state.elapsed_in_window = 0
+    state.driving_since_break = 0
     segments.append(
         DutySegment(
             start_min=clock,
@@ -364,11 +399,9 @@ def _append_reset(
             start_location=where,
             end_location=where,
             miles=0.0,
+            clocks=_clocks(state),
         )
     )
-    state.driving_in_period = 0
-    state.elapsed_in_window = 0
-    state.driving_since_break = 0
     return clock + MIN_RESET_OFF_DUTY_MIN
 
 
@@ -380,6 +413,10 @@ def _append_restart(
     Being >= 10h off duty, the restart also clears the 11h/14h and break clocks.
     Mileage-to-fuel is unaffected.
     """
+    state.on_duty_in_cycle = 0
+    state.driving_in_period = 0
+    state.elapsed_in_window = 0
+    state.driving_since_break = 0
     segments.append(
         DutySegment(
             start_min=clock,
@@ -389,12 +426,9 @@ def _append_restart(
             start_location=where,
             end_location=where,
             miles=0.0,
+            clocks=_clocks(state),
         )
     )
-    state.on_duty_in_cycle = 0
-    state.driving_in_period = 0
-    state.elapsed_in_window = 0
-    state.driving_since_break = 0
     return clock + RESTART_OFF_DUTY_MIN
 
 
@@ -406,6 +440,8 @@ def _append_break(
     The break consumes the 14h window (which never pauses) but does not touch
     the period or cycle clocks.
     """
+    state.elapsed_in_window += MIN_BREAK_MIN
+    state.driving_since_break = 0
     segments.append(
         DutySegment(
             start_min=clock,
@@ -415,10 +451,9 @@ def _append_break(
             start_location=where,
             end_location=where,
             miles=0.0,
+            clocks=_clocks(state),
         )
     )
-    state.elapsed_in_window += MIN_BREAK_MIN
-    state.driving_since_break = 0
     return clock + MIN_BREAK_MIN
 
 
@@ -449,6 +484,10 @@ def _append_on_duty_stop(
     counts toward the cycle, but does not add to the driving clocks. Being >= the
     30-min break, such a stop also satisfies the break (§ 395.3(a)(3)(ii)).
     """
+    state.elapsed_in_window += minutes
+    state.on_duty_in_cycle += minutes
+    if minutes >= MIN_BREAK_MIN:
+        state.driving_since_break = 0
     segments.append(
         DutySegment(
             start_min=clock,
@@ -458,10 +497,7 @@ def _append_on_duty_stop(
             start_location=where,
             end_location=where,
             miles=0.0,
+            clocks=_clocks(state),
         )
     )
-    state.elapsed_in_window += minutes
-    state.on_duty_in_cycle += minutes
-    if minutes >= MIN_BREAK_MIN:
-        state.driving_since_break = 0
     return clock + minutes

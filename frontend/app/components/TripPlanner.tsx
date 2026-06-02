@@ -19,6 +19,7 @@ import RouteIcon from "@mui/icons-material/Route";
 import LocationField from "./LocationField";
 import MapView, { type MapMarker } from "./MapView";
 import DailyLogSheet from "./DailyLogSheet";
+import Itinerary from "./Itinerary";
 import { reverseGeocode, type ResolvedLocation } from "../lib/geocoding";
 import { markersFromSegments, type PlanSegment } from "../lib/tripMarkers";
 import { tripSummary } from "../lib/tripSummary";
@@ -379,12 +380,32 @@ export default function TripPlanner() {
 
         {error && <Alert severity="error">{error}</Alert>}
 
-        <Typography
-          variant="caption"
-          sx={{ mt: "auto", pt: 1, color: "text.secondary" }}
-        >
-          Property-carrying driver · 70 hr / 8 day cycle
-        </Typography>
+        {/* Itinerary fills the panel below the form; an empty-state hint shows
+            before a plan exists so the space never reads as dead. */}
+        <Box sx={{ flex: 1, minHeight: 0, mt: 0.5 }}>
+          <Typography
+            variant="overline"
+            sx={{ color: "text.secondary", fontWeight: 700, letterSpacing: 1, fontSize: 10 }}
+          >
+            Itinerary
+          </Typography>
+          {planResult && !stale ? (
+            <Itinerary
+              days={planResult.days}
+              selectedDay={selectedDay}
+              onSelectDay={(offset) => {
+                setSelectedDay(offset);
+                setView("map");
+              }}
+            />
+          ) : (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {stale
+                ? "Inputs changed — the itinerary is out of date."
+                : "Plan a trip to see a day-by-day itinerary with live HOS clocks here."}
+            </Typography>
+          )}
+        </Box>
       </Box>
 
       {/* Right pane: hero map, with the trip summary + Map/Logs toggle on top */}
