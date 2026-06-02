@@ -173,15 +173,24 @@ export default function TripPlanner() {
   }
 
   return (
-    <Box sx={{ position: "fixed", inset: 0, display: "flex" }}>
-      {/* Left command panel */}
+    <Box
+      sx={{
+        position: "fixed",
+        inset: 0,
+        display: "flex",
+        flexDirection: { xs: "column", md: "row" },
+      }}
+    >
+      {/* Left command panel (top sheet on small screens) */}
       <Box
         sx={{
           width: { xs: "100%", md: 360 },
           flexShrink: 0,
-          height: "100%",
+          height: { xs: "auto", md: "100%" },
+          maxHeight: { xs: "55%", md: "100%" },
           overflowY: "auto",
-          borderRight: 1,
+          borderRight: { xs: 0, md: 1 },
+          borderBottom: { xs: 1, md: 0 },
           borderColor: "divider",
           bgcolor: "background.paper",
           p: 2,
@@ -263,7 +272,7 @@ export default function TripPlanner() {
       </Box>
 
       {/* Right pane: hero map, with the trip summary + Map/Logs toggle on top */}
-      <Box sx={{ flex: 1, position: "relative", minWidth: 0 }}>
+      <Box sx={{ flex: 1, position: "relative", minWidth: 0, minHeight: 0 }}>
         {planResult && (
           <Box
             sx={{
