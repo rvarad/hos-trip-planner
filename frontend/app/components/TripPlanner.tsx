@@ -70,12 +70,21 @@ export default function TripPlanner() {
   const [armedField, setArmedField] = useState<FieldKey | null>(null);
   // The inputs the current plan was computed for (null until a plan exists).
   const [planKey, setPlanKey] = useState<string | null>(null);
+  // Camera policy: fly to the most recently set location; fit-all only on Plan.
+  const [focusPoint, setFocusPoint] = useState<{ lat: number; lng: number } | null>(null);
+  const [fitSignal, setFitSignal] = useState(0);
 
   const setterFor: Record<FieldKey, (l: ResolvedLocation | null) => void> = {
     current: setCurrent,
     pickup: setPickup,
     dropoff: setDropoff,
   };
+
+  // Set a location and focus the map on it (unless it was cleared).
+  function setLocation(field: FieldKey, loc: ResolvedLocation | null) {
+    setterFor[field](loc);
+    if (loc) setFocusPoint({ lat: loc.lat, lng: loc.lng });
+  }
 
   function armField(field: FieldKey) {
     setArmedField(field);
@@ -87,7 +96,8 @@ export default function TripPlanner() {
     if (!field) return;
     setArmedField(null);
     const resolved = await reverseGeocode(lat, lng);
-    setterFor[field](
+    setLocation(
+      field,
       resolved ?? { label: `${lat.toFixed(4)}, ${lng.toFixed(4)}`, lat, lng },
     );
   }
@@ -153,6 +163,8 @@ export default function TripPlanner() {
       const data: PlanResult = await res.json();
       setPlanResult(data);
       setPlanKey(inputsKey(current, pickup, dropoff, cycleHours, startTime));
+      setFitSignal((n) => n + 1); // frame the whole trip once
+      setFocusPoint(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -190,7 +202,7 @@ export default function TripPlanner() {
           <LocationField
             label="Current location"
             value={current}
-            onChange={setCurrent}
+            onChange={(loc) => setLocation("current", loc)}
             onRequestPin={() => armField("current")}
             picking={armedField === "current"}
             dotColor="#38bdf8"
@@ -198,7 +210,7 @@ export default function TripPlanner() {
           <LocationField
             label="Pickup"
             value={pickup}
-            onChange={setPickup}
+            onChange={(loc) => setLocation("pickup", loc)}
             onRequestPin={() => armField("pickup")}
             picking={armedField === "pickup"}
             dotColor="#22c55e"
@@ -206,7 +218,7 @@ export default function TripPlanner() {
           <LocationField
             label="Drop-off"
             value={dropoff}
-            onChange={setDropoff}
+            onChange={(loc) => setLocation("dropoff", loc)}
             onRequestPin={() => armField("dropoff")}
             picking={armedField === "dropoff"}
             dotColor="#ef4444"
@@ -317,6 +329,8 @@ export default function TripPlanner() {
           markers={mapMarkers}
           route={planResult?.route}
           routeDimmed={stale}
+          focusPoint={focusPoint}
+          fitSignal={fitSignal}
           onPinPlaced={armedField ? handleMapPick : undefined}
           showOverlays={view === "map"}
         />

@@ -21,8 +21,20 @@ vi.mock("./LocationField", () => ({
   ),
 }));
 vi.mock("./MapView", () => ({
-  default: ({ onPinPlaced }: { onPinPlaced?: (lat: number, lng: number) => void }) => (
-    <div data-testid="map">
+  default: ({
+    onPinPlaced,
+    focusPoint,
+    fitSignal,
+  }: {
+    onPinPlaced?: (lat: number, lng: number) => void;
+    focusPoint?: { lat: number; lng: number } | null;
+    fitSignal?: number;
+  }) => (
+    <div
+      data-testid="map"
+      data-focus={focusPoint ? `${focusPoint.lat},${focusPoint.lng}` : ""}
+      data-fit={String(fitSignal ?? 0)}
+    >
       <button onClick={() => onPinPlaced?.(40, -90)}>map-pick</button>
     </div>
   ),
@@ -152,6 +164,33 @@ describe("TripPlanner", () => {
     )!;
     const body = JSON.parse((planCall[1] as RequestInit).body as string);
     expect(body.pickup).toEqual({ label: "Tapped Place", lat: 40, lng: -90 });
+  });
+
+  it("focuses the newest location while entering and fits on plan", async () => {
+    const fetchMock = vi.fn(async () =>
+      okJson({
+        routing: "estimated",
+        segments: [{ status: "driving" }],
+        days: [],
+        total_miles: 5,
+        route: [],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TripPlanner />);
+    const map = screen.getByTestId("map");
+    expect(map).toHaveAttribute("data-fit", "0");
+
+    // Setting a location focuses the map on it.
+    await userEvent.click(screen.getByText("field:Pickup"));
+    expect(map).toHaveAttribute("data-focus", "1,2");
+
+    // Planning fits the whole trip (fitSignal bumps).
+    await userEvent.click(screen.getByText("field:Current location"));
+    await userEvent.click(screen.getByText("field:Drop-off"));
+    await userEvent.click(plan());
+    await waitFor(() => expect(map).toHaveAttribute("data-fit", "1"));
   });
 
   it("marks the plan stale when an input changes after planning", async () => {

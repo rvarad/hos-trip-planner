@@ -56,7 +56,10 @@ type MapViewProps = {
   route?: [number, number][];
   /** Draw the route muted/dashed to signal it's stale (inputs changed). */
   routeDimmed?: boolean;
-  fitToMarkers?: boolean;
+  /** Fly to this point when it changes (focus the most recently set location). */
+  focusPoint?: { lat: number; lng: number } | null;
+  /** When this number changes, fit the camera to all markers (e.g. on Plan). */
+  fitSignal?: number;
   pin?: { lat: number; lng: number } | null;
   onPinPlaced?: (lat: number, lng: number) => void;
   /** Show the nav control + legend. Hidden when the map is a dimmed backdrop. */
@@ -67,17 +70,31 @@ export default function MapView({
   markers,
   route,
   routeDimmed = false,
-  fitToMarkers = true,
+  focusPoint,
+  fitSignal = 0,
   pin,
   onPinPlaced,
   showOverlays = true,
 }: MapViewProps) {
   const mapRef = useRef<MapRef>(null);
 
+  // Focus-newest: fly to the location the user just set/edited.
   useEffect(() => {
-    if (!fitToMarkers || !markers?.length) return;
+    if (!focusPoint) return;
     const map = mapRef.current;
     if (!map) return;
+    map.flyTo({
+      center: [focusPoint.lng, focusPoint.lat],
+      zoom: 11,
+      duration: 800,
+    });
+  }, [focusPoint]);
+
+  // Fit the whole trip when the parent bumps fitSignal (e.g. after Plan).
+  useEffect(() => {
+    if (!fitSignal) return;
+    const map = mapRef.current;
+    if (!map || !markers?.length) return;
     const lats = markers.map((m) => m.lat);
     const lngs = markers.map((m) => m.lng);
     map.fitBounds(
@@ -85,9 +102,11 @@ export default function MapView({
         [Math.min(...lngs), Math.min(...lats)],
         [Math.max(...lngs), Math.max(...lats)],
       ],
-      { padding: 64, maxZoom: 12, duration: 0 },
+      { padding: 64, maxZoom: 12, duration: 800 },
     );
-  }, [markers, fitToMarkers]);
+    // markers are read intentionally only when fitSignal changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fitSignal]);
 
   // Legend lists only the kinds actually on the map, in a stable order.
   const presentKinds = KIND_ORDER.filter((k) =>
