@@ -345,6 +345,7 @@ export default function TripPlanner() {
           routeDimmed={stale}
           focusPoint={focusPoint}
           fitSignal={fitSignal}
+          startTimeMinutes={parseStartTimeMinutes(startTime)}
           onPinPlaced={armedField ? handleMapPick : undefined}
           showOverlays={view === "map"}
         />

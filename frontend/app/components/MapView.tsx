@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Map, {
   Layer,
   Marker,
   NavigationControl,
+  Popup,
   Source,
   type MapLayerMouseEvent,
   type MapRef,
@@ -28,7 +29,32 @@ export type MapMarker = {
   lng: number;
   kind: string;
   label?: string;
+  // Optional itinerary detail shown in the marker popup.
+  description?: string;
+  /** Minutes from trip start when the driver reaches this point. */
+  arrivalMin?: number;
+  /** Stop length in minutes (0 for the trip start). */
+  durationMin?: number;
+  /** Cumulative driven miles reached by this point. */
+  milesSoFar?: number;
 };
+
+function formatClock(totalMin: number): string {
+  const day = Math.floor(totalMin / 1440) + 1;
+  const minOfDay = ((totalMin % 1440) + 1440) % 1440;
+  const hh = String(Math.floor(minOfDay / 60)).padStart(2, "0");
+  const mm = String(minOfDay % 60).padStart(2, "0");
+  return `Day ${day} · ${hh}:${mm}`;
+}
+
+function formatDuration(min: number): string {
+  if (min >= 60) {
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    return m ? `${h}h ${m}m` : `${h}h`;
+  }
+  return `${min} min`;
+}
 
 // Semantic marker palette + icon. "#38bdf8" matches the theme accent. This is
 // the single source of truth for marker colors, icons, and legend labels.
@@ -64,6 +90,8 @@ type MapViewProps = {
   onPinPlaced?: (lat: number, lng: number) => void;
   /** Show the nav control + legend. Hidden when the map is a dimmed backdrop. */
   showOverlays?: boolean;
+  /** Minute-of-day the trip starts, for formatting popup arrival times. */
+  startTimeMinutes?: number;
 };
 
 export default function MapView({
@@ -75,8 +103,13 @@ export default function MapView({
   pin,
   onPinPlaced,
   showOverlays = true,
+  startTimeMinutes = 0,
 }: MapViewProps) {
   const mapRef = useRef<MapRef>(null);
+  const [selected, setSelected] = useState<MapMarker | null>(null);
+
+  // Close any open popup when the marker set changes (re-plan, focus, etc.).
+  useEffect(() => setSelected(null), [markers]);
 
   // Focus-newest: fly to the location the user just set/edited.
   useEffect(() => {
@@ -172,12 +205,14 @@ export default function MapView({
         </Marker>
       )}
       {markers?.map((m, i) => {
-        const { color, Icon, label } = metaFor(m.kind);
+        const { color, Icon } = metaFor(m.kind);
         return (
           <Marker key={i} longitude={m.lng} latitude={m.lat}>
             <div
-              title={m.label ?? label}
+              onMouseEnter={() => setSelected(m)}
+              onMouseLeave={() => setSelected(null)}
               style={{
+                cursor: "pointer",
                 width: 26,
                 height: 26,
                 borderRadius: "50%",
@@ -194,6 +229,33 @@ export default function MapView({
           </Marker>
         );
       })}
+
+      {selected && (
+        <Popup
+          longitude={selected.lng}
+          latitude={selected.lat}
+          offset={18}
+          closeButton={false}
+          closeOnClick={false}
+          onClose={() => setSelected(null)}
+        >
+          <div style={{ font: "12px/1.5 sans-serif", color: "#111", minWidth: 150 }}>
+            <div style={{ fontWeight: 700, marginBottom: 2 }}>
+              {selected.description ?? metaFor(selected.kind).label}
+            </div>
+            {selected.label && <div style={{ color: "#555" }}>{selected.label}</div>}
+            {selected.arrivalMin != null && (
+              <div>{formatClock(startTimeMinutes + selected.arrivalMin)}</div>
+            )}
+            {selected.durationMin ? (
+              <div>Stop: {formatDuration(selected.durationMin)}</div>
+            ) : null}
+            {selected.milesSoFar != null && (
+              <div>{Math.round(selected.milesSoFar)} mi so far</div>
+            )}
+          </div>
+        </Popup>
+      )}
 
       {showOverlays && presentKinds.length > 0 && (
         <div

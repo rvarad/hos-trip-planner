@@ -11,17 +11,19 @@ vi.mock("react-map-gl/maplibre", () => ({
     </div>
   ),
   NavigationControl: () => <div data-testid="nav-control" />,
-  Marker: ({ children, onDragEnd }: any) => (
+  Marker: ({ children, onClick, onDragEnd }: any) => (
     <div
       data-testid="marker"
       onClick={(e) => {
         e.stopPropagation();
+        onClick?.();
         onDragEnd?.({ lngLat: { lng: -91, lat: 41 } });
       }}
     >
       {children}
     </div>
   ),
+  Popup: ({ children }: any) => <div data-testid="popup">{children}</div>,
   Source: ({ children, data }: any) => (
     <div
       data-testid="source"
@@ -92,6 +94,38 @@ describe("MapView", () => {
     expect(screen.getByText("Fuel")).toBeInTheDocument();
     // Kinds not on the map aren't listed.
     expect(screen.queryByText("Rest")).not.toBeInTheDocument();
+  });
+
+  it("shows a popup with stop details on hover, and hides it on leave", () => {
+    render(
+      <MapView
+        startTimeMinutes={480}
+        markers={[
+          {
+            lat: 1,
+            lng: 2,
+            kind: "fuel",
+            label: "Pilot Travel Center",
+            description: "Fuel stop",
+            arrivalMin: 600,
+            durationMin: 30,
+            milesSoFar: 500,
+          },
+        ]}
+      />,
+    );
+    const badge = screen.getByTestId("marker").firstChild as Element;
+    expect(screen.queryByTestId("popup")).not.toBeInTheDocument();
+
+    fireEvent.mouseEnter(badge);
+    expect(screen.getByTestId("popup")).toBeInTheDocument();
+    expect(screen.getByText("Fuel stop")).toBeInTheDocument();
+    // 480 + 600 = 1080 min => Day 1, 18:00
+    expect(screen.getByText(/18:00/)).toBeInTheDocument();
+    expect(screen.getByText(/500 mi/)).toBeInTheDocument();
+
+    fireEvent.mouseLeave(badge);
+    expect(screen.queryByTestId("popup")).not.toBeInTheDocument();
   });
 
   it("draws the route line through the given coordinates", () => {

@@ -36,10 +36,18 @@ export function markersFromSegments(segments: PlanSegment[]): MapMarker[] {
       lng: first.start_location.lng,
       kind: "current",
       label: first.start_location.label,
+      description: "Trip start",
+      arrivalMin: first.start_min,
+      durationMin: 0,
+      milesSoFar: 0,
     });
   }
 
+  // Accumulate driving miles as we walk the timeline so each stop can show the
+  // cumulative miles reached by that point.
+  let milesSoFar = 0;
   for (const seg of segments) {
+    milesSoFar += seg.miles ?? 0;
     const kind = STOP_KIND_BY_DESCRIPTION[seg.description];
     if (!kind || !seg.start_location) continue;
     markers.push({
@@ -47,6 +55,10 @@ export function markersFromSegments(segments: PlanSegment[]): MapMarker[] {
       lng: seg.start_location.lng,
       kind,
       label: seg.start_location.label,
+      description: seg.description,
+      arrivalMin: seg.start_min,
+      durationMin: seg.end_min - seg.start_min,
+      milesSoFar,
     });
   }
 

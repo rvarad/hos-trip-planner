@@ -60,6 +60,37 @@ describe("markersFromSegments", () => {
     expect(markers.map((m) => m.kind)).toEqual(["current", "rest"]);
   });
 
+  it("enriches stop markers with cumulative miles, arrival and duration", () => {
+    const a = loc("A", 0, 0);
+    const kc = loc("Kansas City", 1, 1);
+    const segments = [
+      {
+        start_min: 0,
+        end_min: 120,
+        status: "driving",
+        description: "Drive to Kansas City",
+        start_location: a,
+        end_location: kc,
+        miles: 100,
+      },
+      {
+        start_min: 120,
+        end_min: 180,
+        status: "on_duty_not_driving",
+        description: "Pickup",
+        start_location: kc,
+        end_location: kc,
+        miles: 0,
+      },
+    ];
+    const markers = markersFromSegments(segments);
+    const pickup = markers.find((m) => m.kind === "pickup")!;
+    expect(pickup.milesSoFar).toBe(100);
+    expect(pickup.arrivalMin).toBe(120);
+    expect(pickup.durationMin).toBe(60);
+    expect(pickup.description).toBe("Pickup");
+  });
+
   it("returns no markers for an empty timeline", () => {
     expect(markersFromSegments([])).toEqual([]);
   });
