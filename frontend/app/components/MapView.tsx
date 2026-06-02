@@ -54,17 +54,23 @@ type MapViewProps = {
   markers?: MapMarker[];
   /** The planned route as ordered [lng, lat] pairs (GeoJSON order). */
   route?: [number, number][];
+  /** Draw the route muted/dashed to signal it's stale (inputs changed). */
+  routeDimmed?: boolean;
   fitToMarkers?: boolean;
   pin?: { lat: number; lng: number } | null;
   onPinPlaced?: (lat: number, lng: number) => void;
+  /** Show the nav control + legend. Hidden when the map is a dimmed backdrop. */
+  showOverlays?: boolean;
 };
 
 export default function MapView({
   markers,
   route,
+  routeDimmed = false,
   fitToMarkers = true,
   pin,
   onPinPlaced,
+  showOverlays = true,
 }: MapViewProps) {
   const mapRef = useRef<MapRef>(null);
 
@@ -101,7 +107,7 @@ export default function MapView({
           : undefined
       }
     >
-      <NavigationControl position="top-right" />
+      {showOverlays && <NavigationControl position="top-right" />}
       {route && route.length >= 2 && (
         <Source
           id="route"
@@ -116,7 +122,12 @@ export default function MapView({
             id="route-line"
             type="line"
             layout={{ "line-join": "round", "line-cap": "round" }}
-            paint={{ "line-color": "#38bdf8", "line-width": 4, "line-opacity": 0.85 }}
+            paint={{
+              "line-color": routeDimmed ? "#64748b" : "#38bdf8",
+              "line-width": 4,
+              "line-opacity": routeDimmed ? 0.35 : 0.85,
+              ...(routeDimmed ? { "line-dasharray": [2, 2] } : {}),
+            }}
           />
         </Source>
       )}
@@ -165,7 +176,7 @@ export default function MapView({
         );
       })}
 
-      {presentKinds.length > 0 && (
+      {showOverlays && presentKinds.length > 0 && (
         <div
           style={{
             position: "absolute",

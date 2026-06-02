@@ -68,6 +68,17 @@ describe("MapView", () => {
     expect(onPinPlaced).toHaveBeenCalledWith(41, -91);
   });
 
+  it("hides the nav control and legend when showOverlays is false", () => {
+    render(
+      <MapView
+        showOverlays={false}
+        markers={[{ lat: 1, lng: 2, kind: "pickup" }]}
+      />,
+    );
+    expect(screen.queryByTestId("nav-control")).not.toBeInTheDocument();
+    expect(screen.queryByText("Pickup")).not.toBeInTheDocument();
+  });
+
   it("shows a legend for the marker kinds present", () => {
     render(
       <MapView
