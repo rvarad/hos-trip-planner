@@ -43,21 +43,17 @@ function parseStartTimeMinutes(hhmm: string): number {
   return (h || 0) * 60 + (m || 0);
 }
 
-// Leading dot for a location field: a colored circle (origin/waypoint) or square
-// (destination), matching the map marker palette.
-function FieldDot({ color, square }: { color: string; square?: boolean }) {
-  return (
-    <Box
-      sx={{
-        width: 12,
-        height: 12,
-        flexShrink: 0,
-        borderRadius: square ? "2px" : "50%",
-        bgcolor: color,
-        boxShadow: "0 0 0 2px rgba(0,0,0,0.4)",
-      }}
-    />
-  );
+// A plan is a snapshot of the inputs that produced it. This key lets us detect
+// when the current inputs have drifted from that snapshot (stale plan).
+function inputsKey(
+  current: ResolvedLocation | null,
+  pickup: ResolvedLocation | null,
+  dropoff: ResolvedLocation | null,
+  cycleHours: string,
+  startTime: string,
+): string {
+  const c = (l: ResolvedLocation | null) => (l ? `${l.lat},${l.lng}` : "");
+  return [c(current), c(pickup), c(dropoff), cycleHours, startTime].join("|");
 }
 
 export default function TripPlanner() {
@@ -72,6 +68,8 @@ export default function TripPlanner() {
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<"map" | "logs">("map");
   const [armedField, setArmedField] = useState<FieldKey | null>(null);
+  // The inputs the current plan was computed for (null until a plan exists).
+  const [planKey, setPlanKey] = useState<string | null>(null);
 
   const setterFor: Record<FieldKey, (l: ResolvedLocation | null) => void> = {
     current: setCurrent,
@@ -105,22 +103,25 @@ export default function TripPlanner() {
   }, [armedField]);
 
   const cycleNum = Number(cycleHours);
-  const cycleValid = cycleHours !== "" && !isNaN(cycleNum) && cycleNum >= 0 && cycleNum <= 70;
+  const cycleValid =
+    cycleHours !== "" && !isNaN(cycleNum) && cycleNum >= 0 && cycleNum <= 70;
   const canPlan = !!current && !!pickup && !!dropoff && cycleValid && !isLoading;
 
-  const inputMarkers: MapMarker[] = (
-    [
-      current && { ...current, kind: "current" },
-      pickup && { ...pickup, kind: "pickup" },
-      dropoff && { ...dropoff, kind: "dropoff" },
-    ].filter(Boolean) as MapMarker[]
-  );
+  const inputMarkers: MapMarker[] = [
+    current && { ...current, kind: "current" },
+    pickup && { ...pickup, kind: "pickup" },
+    dropoff && { ...dropoff, kind: "dropoff" },
+  ].filter(Boolean) as MapMarker[];
 
-  // Once a plan exists, show its route line and stop markers; before that, show
-  // the input locations the user has chosen so far.
-  const mapMarkers = planResult
-    ? markersFromSegments(planResult.segments)
-    : inputMarkers;
+  // The plan is stale once the inputs drift from what produced it.
+  const stale =
+    !!planResult &&
+    planKey !== inputsKey(current, pickup, dropoff, cycleHours, startTime);
+
+  // Map pins always reflect the live inputs; only a fresh plan's rich stop
+  // markers (fuel/rest/…) replace them. A stale plan's route is drawn dimmed.
+  const mapMarkers =
+    planResult && !stale ? markersFromSegments(planResult.segments) : inputMarkers;
 
   const hasDays = !!planResult && planResult.days.length > 0;
 
@@ -151,6 +152,7 @@ export default function TripPlanner() {
       }
       const data: PlanResult = await res.json();
       setPlanResult(data);
+      setPlanKey(inputsKey(current, pickup, dropoff, cycleHours, startTime));
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -185,42 +187,31 @@ export default function TripPlanner() {
         </Typography>
 
         <Stack spacing={2}>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <FieldDot color="#38bdf8" />
-            <Box sx={{ flexGrow: 1 }}>
-              <LocationField
-                label="Current location"
-                value={current}
-                onChange={setCurrent}
-                onRequestPin={() => armField("current")}
-                picking={armedField === "current"}
-              />
-            </Box>
-          </Box>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <FieldDot color="#22c55e" />
-            <Box sx={{ flexGrow: 1 }}>
-              <LocationField
-                label="Pickup"
-                value={pickup}
-                onChange={setPickup}
-                onRequestPin={() => armField("pickup")}
-                picking={armedField === "pickup"}
-              />
-            </Box>
-          </Box>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <FieldDot color="#ef4444" square />
-            <Box sx={{ flexGrow: 1 }}>
-              <LocationField
-                label="Drop-off"
-                value={dropoff}
-                onChange={setDropoff}
-                onRequestPin={() => armField("dropoff")}
-                picking={armedField === "dropoff"}
-              />
-            </Box>
-          </Box>
+          <LocationField
+            label="Current location"
+            value={current}
+            onChange={setCurrent}
+            onRequestPin={() => armField("current")}
+            picking={armedField === "current"}
+            dotColor="#38bdf8"
+          />
+          <LocationField
+            label="Pickup"
+            value={pickup}
+            onChange={setPickup}
+            onRequestPin={() => armField("pickup")}
+            picking={armedField === "pickup"}
+            dotColor="#22c55e"
+          />
+          <LocationField
+            label="Drop-off"
+            value={dropoff}
+            onChange={setDropoff}
+            onRequestPin={() => armField("dropoff")}
+            picking={armedField === "dropoff"}
+            dotColor="#ef4444"
+            dotSquare
+          />
         </Stack>
 
         <Stack direction="row" spacing={1.5}>
@@ -255,12 +246,17 @@ export default function TripPlanner() {
 
         {planResult && (
           <Paper variant="outlined" sx={{ p: 1.5 }}>
+            {stale && (
+              <Alert severity="warning" sx={{ mb: 1 }}>
+                Inputs changed — re-plan to update.
+              </Alert>
+            )}
             {planResult.routing === "estimated" && (
               <Alert severity="info" sx={{ mb: 1 }}>
                 Distances are approximate (estimated routing).
               </Alert>
             )}
-            <Typography variant="body2">
+            <Typography variant="body2" sx={{ opacity: stale ? 0.55 : 1 }}>
               {planResult.total_miles.toFixed(2)} miles · {planResult.segments.length} segments ·{" "}
               {planResult.days.length} days
             </Typography>
@@ -279,8 +275,8 @@ export default function TripPlanner() {
             sx={{
               position: "absolute",
               top: 12,
-              right: 12,
-              zIndex: 2,
+              left: 16,
+              zIndex: 4,
               bgcolor: "background.paper",
               boxShadow: 3,
             }}
@@ -297,7 +293,7 @@ export default function TripPlanner() {
               top: 12,
               left: "50%",
               transform: "translateX(-50%)",
-              zIndex: 3,
+              zIndex: 5,
               display: "flex",
               alignItems: "center",
               gap: 1,
@@ -320,7 +316,9 @@ export default function TripPlanner() {
         <MapView
           markers={mapMarkers}
           route={planResult?.route}
+          routeDimmed={stale}
           onPinPlaced={armedField ? handleMapPick : undefined}
+          showOverlays={view === "map"}
         />
 
         {view === "logs" && planResult && (
@@ -328,14 +326,13 @@ export default function TripPlanner() {
             sx={{
               position: "absolute",
               inset: 0,
+              zIndex: 2,
               overflowY: "auto",
               p: 3,
-              bgcolor: "#0b0f14",
+              bgcolor: "rgba(8, 11, 16, 0.8)",
+              backdropFilter: "blur(2px)",
             }}
           >
-            <Typography variant="h6" sx={{ mb: 2 }}>
-              Daily Logs
-            </Typography>
             {planResult.days.map((day) => (
               <Paper
                 key={day.date_offset}

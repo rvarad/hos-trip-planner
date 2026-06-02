@@ -154,6 +154,32 @@ describe("TripPlanner", () => {
     expect(body.pickup).toEqual({ label: "Tapped Place", lat: 40, lng: -90 });
   });
 
+  it("marks the plan stale when an input changes after planning", async () => {
+    const fetchMock = vi.fn(async () =>
+      okJson({
+        routing: "osrm",
+        segments: [{ status: "driving" }],
+        days: [],
+        total_miles: 100,
+        route: [],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TripPlanner />);
+    await resolveAll();
+    await userEvent.click(plan());
+    expect(await screen.findByText(/100\.00 miles/)).toBeInTheDocument();
+    // Not stale right after planning.
+    expect(screen.queryByText(/re-plan/i)).not.toBeInTheDocument();
+
+    // Changing an input (cycle hours) makes the plan stale.
+    const cycle = screen.getByLabelText("Cycle hours used");
+    await userEvent.clear(cycle);
+    await userEvent.type(cycle, "5");
+    expect(await screen.findByText(/re-plan/i)).toBeInTheDocument();
+  });
+
   it("offers a Map/Daily Logs toggle and renders log sheets when a plan has days", async () => {
     const fetchMock = vi.fn(async () =>
       okJson({
