@@ -14,7 +14,7 @@ import LocalShippingIcon from "@mui/icons-material/LocalShipping";
 
 import LocationField from "./LocationField";
 import MapView, { type MapMarker } from "./MapView";
-import DailyLogSheet, { type DutySegment } from "./DailyLogSheet";
+import DailyLogSheet from "./DailyLogSheet";
 import { reverseGeocode, type ResolvedLocation } from "../lib/geocoding";
 import { markersFromSegments, type PlanSegment } from "../lib/tripMarkers";
 
@@ -27,7 +27,7 @@ const PICK_LABELS: Record<FieldKey, string> = {
 
 interface DayLog {
   date_offset: number;
-  segments: DutySegment[];
+  segments: PlanSegment[];
 }
 
 interface PlanResult {
@@ -206,6 +206,7 @@ export default function TripPlanner() {
             onRequestPin={() => armField("current")}
             picking={armedField === "current"}
             dotColor="#38bdf8"
+            disabled={isLoading}
           />
           <LocationField
             label="Pickup"
@@ -214,6 +215,7 @@ export default function TripPlanner() {
             onRequestPin={() => armField("pickup")}
             picking={armedField === "pickup"}
             dotColor="#22c55e"
+            disabled={isLoading}
           />
           <LocationField
             label="Drop-off"
@@ -223,6 +225,7 @@ export default function TripPlanner() {
             picking={armedField === "dropoff"}
             dotColor="#ef4444"
             dotSquare
+            disabled={isLoading}
           />
         </Stack>
 
@@ -232,6 +235,7 @@ export default function TripPlanner() {
             type="number"
             value={cycleHours}
             onChange={(e) => setCycleHours(e.target.value)}
+            disabled={isLoading}
             sx={{ flex: 1 }}
           />
           <TextField
@@ -240,6 +244,7 @@ export default function TripPlanner() {
             value={startTime}
             onChange={(e) => setStartTime(e.target.value)}
             slotProps={{ inputLabel: { shrink: true } }}
+            disabled={isLoading}
             sx={{ flex: 1 }}
           />
         </Stack>
@@ -255,47 +260,56 @@ export default function TripPlanner() {
         </Button>
 
         {error && <Alert severity="error">{error}</Alert>}
-
-        {planResult && (
-          <Paper variant="outlined" sx={{ p: 1.5 }}>
-            {stale && (
-              <Alert severity="warning" sx={{ mb: 1 }}>
-                Inputs changed — re-plan to update.
-              </Alert>
-            )}
-            {planResult.routing === "estimated" && (
-              <Alert severity="info" sx={{ mb: 1 }}>
-                Distances are approximate (estimated routing).
-              </Alert>
-            )}
-            <Typography variant="body2" sx={{ opacity: stale ? 0.55 : 1 }}>
-              {planResult.total_miles.toFixed(2)} miles · {planResult.segments.length} segments ·{" "}
-              {planResult.days.length} days
-            </Typography>
-          </Paper>
-        )}
       </Box>
 
-      {/* Right pane: hero map, with a Map/Logs toggle once a plan has days */}
+      {/* Right pane: hero map, with the trip summary + Map/Logs toggle on top */}
       <Box sx={{ flex: 1, position: "relative", minWidth: 0 }}>
-        {hasDays && (
-          <ToggleButtonGroup
-            value={view}
-            exclusive
-            size="small"
-            onChange={(_, v) => v && setView(v)}
+        {planResult && (
+          <Box
             sx={{
               position: "absolute",
               top: 12,
               left: 16,
               zIndex: 4,
-              bgcolor: "background.paper",
-              boxShadow: 3,
+              display: "flex",
+              flexDirection: "column",
+              gap: 1,
+              alignItems: "flex-start",
+              maxWidth: "calc(100% - 32px)",
             }}
           >
-            <ToggleButton value="map">Map</ToggleButton>
-            <ToggleButton value="logs">Daily Logs</ToggleButton>
-          </ToggleButtonGroup>
+            {hasDays && (
+              <ToggleButtonGroup
+                value={view}
+                exclusive
+                size="small"
+                onChange={(_, v) => v && setView(v)}
+                sx={{ bgcolor: "background.paper", boxShadow: 3 }}
+              >
+                <ToggleButton value="map">Map</ToggleButton>
+                <ToggleButton value="logs">Daily Logs</ToggleButton>
+              </ToggleButtonGroup>
+            )}
+            <Paper elevation={4} sx={{ px: 1.5, py: 1 }}>
+              {stale && (
+                <Alert severity="warning" sx={{ mb: 1, py: 0 }}>
+                  Inputs changed — re-plan to update.
+                </Alert>
+              )}
+              {planResult.routing === "estimated" && (
+                <Alert severity="info" sx={{ mb: 1, py: 0 }}>
+                  Distances are approximate (estimated routing).
+                </Alert>
+              )}
+              <Typography
+                variant="body2"
+                sx={{ fontWeight: 600, opacity: stale ? 0.55 : 1 }}
+              >
+                {planResult.total_miles.toFixed(2)} miles · {planResult.segments.length}{" "}
+                segments · {planResult.days.length} days
+              </Typography>
+            </Paper>
+          </Box>
         )}
 
         {armedField && (
@@ -347,17 +361,35 @@ export default function TripPlanner() {
               backdropFilter: "blur(2px)",
             }}
           >
-            {planResult.days.map((day) => (
-              <Paper
-                key={day.date_offset}
-                sx={{ bgcolor: "#fff", p: 2, mb: 3, maxWidth: 900, mx: "auto" }}
-              >
-                <Typography variant="subtitle2" sx={{ color: "#555", mb: 1 }}>
-                  Day {day.date_offset + 1}
-                </Typography>
-                <DailyLogSheet segments={day.segments} />
-              </Paper>
-            ))}
+            {planResult.days.map((day) => {
+              const dayMiles = day.segments.reduce(
+                (sum, seg) => sum + (seg.miles ?? 0),
+                0,
+              );
+              return (
+                <Paper
+                  key={day.date_offset}
+                  sx={{ bgcolor: "#fff", p: 2, mb: 3, maxWidth: 900, mx: "auto" }}
+                >
+                  <Box
+                    sx={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "baseline",
+                      mb: 1,
+                    }}
+                  >
+                    <Typography variant="subtitle2" sx={{ color: "#555" }}>
+                      Day {day.date_offset + 1}
+                    </Typography>
+                    <Typography variant="subtitle2" sx={{ color: "#555" }}>
+                      {dayMiles.toFixed(1)} mi driven
+                    </Typography>
+                  </Box>
+                  <DailyLogSheet segments={day.segments} />
+                </Paper>
+              );
+            })}
           </Box>
         )}
       </Box>

@@ -193,6 +193,28 @@ describe("TripPlanner", () => {
     await waitFor(() => expect(map).toHaveAttribute("data-fit", "1"));
   });
 
+  it("disables the inputs while a plan is processing", async () => {
+    let resolveFetch: (r: Response) => void = () => {};
+    const fetchMock = vi.fn(
+      () => new Promise<Response>((res) => (resolveFetch = res)),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TripPlanner />);
+    await resolveAll();
+    const cycle = screen.getByLabelText("Cycle hours used");
+    expect(cycle).toBeEnabled();
+
+    await userEvent.click(plan());
+    // Request in flight: inputs are locked.
+    await waitFor(() => expect(cycle).toBeDisabled());
+
+    resolveFetch(
+      okJson({ routing: "estimated", segments: [], days: [], total_miles: 0, route: [] }),
+    );
+    await waitFor(() => expect(cycle).toBeEnabled());
+  });
+
   it("marks the plan stale when an input changes after planning", async () => {
     const fetchMock = vi.fn(async () =>
       okJson({
@@ -227,7 +249,9 @@ describe("TripPlanner", () => {
         days: [
           {
             date_offset: 0,
-            segments: [{ start_min: 480, end_min: 600, status: "driving" }],
+            segments: [
+              { start_min: 480, end_min: 600, status: "driving", miles: 250 },
+            ],
           },
         ],
         total_miles: 100,
@@ -244,7 +268,9 @@ describe("TripPlanner", () => {
     const logsToggle = await screen.findByRole("button", { name: /daily logs/i });
     await userEvent.click(logsToggle);
 
-    // Switching to logs renders a DailyLogSheet (its row labels appear).
+    // Switching to logs renders a DailyLogSheet (its row labels appear)...
     expect((await screen.findAllByText("Driving")).length).toBeGreaterThan(0);
+    // ...with that day's driven miles in the header.
+    expect(await screen.findByText(/250\.0 mi/)).toBeInTheDocument();
   });
 });
