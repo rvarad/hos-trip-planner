@@ -39,6 +39,7 @@ type LocationFieldProps = {
   /** Leading dot color (origin/stop). Square dot marks the destination. */
   dotColor?: string;
   dotSquare?: boolean;
+  disabled?: boolean;
 };
 
 export default function LocationField({
@@ -49,6 +50,7 @@ export default function LocationField({
   onRequestPin,
   dotColor,
   dotSquare,
+  disabled,
 }: LocationFieldProps) {
   const [input, setInput] = useState("");
   const [options, setOptions] = useState<ResolvedLocation[]>([]);
@@ -98,6 +100,7 @@ export default function LocationField({
       <Autocomplete<Option>
         options={allOptions}
         value={value}
+        disabled={disabled}
         // Open on focus so the actions are immediately available; the actions
         // keep the list non-empty so there's never a bare "No options" popup.
         open={open}

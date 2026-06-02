@@ -105,6 +105,13 @@ describe("LocationField", () => {
     errorSpy.mockRestore();
   });
 
+  it("disables the input when disabled", () => {
+    render(
+      <LocationField label="Pickup" value={null} onChange={() => {}} disabled />,
+    );
+    expect(screen.getByRole("combobox")).toBeDisabled();
+  });
+
   it("shows the full selected label as a caption", () => {
     render(
       <LocationField
