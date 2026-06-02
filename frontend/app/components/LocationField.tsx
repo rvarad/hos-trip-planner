@@ -7,6 +7,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 import PushPinOutlinedIcon from "@mui/icons-material/PushPinOutlined";
+import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
 
 import {
   reverseGeocode,
@@ -165,40 +166,82 @@ export default function LocationField({
           // into the props object instead of extracting it, leaving it keyless.
           const { key: _key, onClick, ...rest } = props;
           if (isAction(option)) {
-            const Icon =
-              option.action === "pin" ? PushPinOutlinedIcon : MyLocationIcon;
+            const isPin = option.action === "pin";
+            const Icon = isPin ? PushPinOutlinedIcon : MyLocationIcon;
+            const description = isPin
+              ? "Tap the map to place it"
+              : "From your device location";
             return (
-              <li
+              <Box
+                component="li"
                 key={option.action}
                 {...rest}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={(e) => {
                   e.stopPropagation();
                   setOpen(false);
-                  if (option.action === "pin") onRequestPin?.();
+                  if (isPin) onRequestPin?.();
                   else handleUseMyLocation();
                 }}
-                style={{
+                sx={{
                   display: "flex",
                   alignItems: "center",
-                  gap: 8,
-                  color: "#38bdf8",
-                  fontWeight: 500,
-                  backgroundColor: "rgba(56,189,248,0.08)",
+                  gap: 1.25,
+                  px: 1.25,
+                  py: 1,
+                  // Separate the geolocation action from the search results below.
+                  borderBottom: option.action === "geo" ? 1 : 0,
+                  borderColor: "divider",
+                  "&:hover": { bgcolor: "rgba(56,189,248,0.14)" },
                 }}
               >
-                <Icon fontSize="small" />
-                {option.label}
-              </li>
+                <Box
+                  sx={{
+                    width: 30,
+                    height: 30,
+                    flexShrink: 0,
+                    borderRadius: 1.5,
+                    display: "grid",
+                    placeItems: "center",
+                    bgcolor: "rgba(56,189,248,0.18)",
+                    color: "#38bdf8",
+                  }}
+                >
+                  <Icon fontSize="small" />
+                </Box>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography
+                    variant="body2"
+                    sx={{ fontWeight: 600, color: "#38bdf8", lineHeight: 1.2 }}
+                  >
+                    {option.label}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                    {description}
+                  </Typography>
+                </Box>
+              </Box>
             );
           }
           // Photon can return several results with the same label, so key on
           // the coordinates instead of the (non-unique) label.
           const loc = option as ResolvedLocation;
           return (
-            <li key={`${loc.lat},${loc.lng}`} {...rest} onClick={onClick}>
-              {loc.label}
-            </li>
+            <Box
+              component="li"
+              key={`${loc.lat},${loc.lng}`}
+              {...rest}
+              onClick={onClick}
+              sx={{ display: "flex", alignItems: "center", gap: 1.25, px: 1.25, py: 0.75 }}
+            >
+              <PlaceOutlinedIcon
+                fontSize="small"
+                sx={{ color: "text.secondary", flexShrink: 0 }}
+              />
+              <Typography variant="body2" sx={{ minWidth: 0 }}>
+                {loc.label}
+              </Typography>
+            </Box>
           );
         }}
       />
