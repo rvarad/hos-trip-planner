@@ -2,7 +2,7 @@
 
 Plan a truck driver's trip and get back a route map plus federally-compliant ELD daily log sheets. Enter where you are, where you're picking up and dropping off, and how many hours you've already worked this cycle — the app computes an Hours-of-Service-legal schedule (driving, breaks, rest, fuel) and draws the official daily logs for every day of the trip.
 
-**Live demo:** _coming soon_
+**Live demo:** https://hos-trip-planner-three.vercel.app
 
 ## What it does
 
