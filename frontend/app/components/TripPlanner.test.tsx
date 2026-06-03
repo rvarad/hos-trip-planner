@@ -398,7 +398,7 @@ describe("TripPlanner", () => {
       ],
     });
 
-  it("highlights a day on the map when its log card is clicked", async () => {
+  it("clicking a log card selects that day everywhere, staying on the logs", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => twoDayPlan()));
     render(<TripPlanner />);
     await resolveAll();
@@ -410,14 +410,19 @@ describe("TripPlanner", () => {
     const day2 = await screen.findAllByText("Day 2");
     await userEvent.click(day2[day2.length - 1]);
 
-    // Back on the map, with that day handed to MapView as the highlight.
-    await waitFor(() =>
-      expect(screen.queryByText("Sleeper Berth")).not.toBeInTheDocument(),
-    );
-    expect(screen.getByTestId("map")).toHaveAttribute("data-highlight", "1");
+    // The view stays on the logs (no jump), and the selection shows everywhere:
+    expect((await screen.findAllByText("Sleeper Berth")).length).toBeGreaterThan(0);
+    expect(screen.getByTestId("map")).toHaveAttribute("data-highlight", "1"); // map
+    expect(document.getElementById("day-log-1")).toHaveAttribute(
+      "data-selected",
+      "true",
+    ); // log card
+    // ...and the itinerary header for that day is marked selected too.
+    const itinSelected = document.querySelector('[data-selected="true"]:not([id])');
+    expect(itinSelected).toHaveTextContent("Day 2");
   });
 
-  it("opens the logs for a day when its route segment is clicked on the map", async () => {
+  it("clicking a day's route on the map selects it everywhere, staying on the map", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => twoDayPlan()));
     render(<TripPlanner />);
     await resolveAll();
@@ -426,13 +431,11 @@ describe("TripPlanner", () => {
     // Map view: click a day's route segment (mock fires onDaySelect(1)).
     await userEvent.click(await screen.findByText("map-day-1"));
 
-    // The logs open (sheet rows visible) with that day's card marked selected.
-    expect((await screen.findAllByText("Sleeper Berth")).length).toBeGreaterThan(0);
+    // The view stays on the map (logs not shown), and the day is highlighted.
+    expect(screen.queryByText("Sleeper Berth")).not.toBeInTheDocument();
     expect(screen.getByTestId("map")).toHaveAttribute("data-highlight", "1");
-    expect(document.getElementById("day-log-1")).toHaveAttribute(
-      "data-selected",
-      "true",
-    );
+    const itinSelected = document.querySelector('[data-selected="true"]');
+    expect(itinSelected).toHaveTextContent("Day 2");
   });
 
   it("re-fits the whole trip when the selected day is cleared", async () => {

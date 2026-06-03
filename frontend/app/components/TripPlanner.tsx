@@ -148,6 +148,19 @@ export default function TripPlanner() {
     setView("map"); // make sure the map is visible to tap on
   }
 
+  // Selecting a day from anywhere (itinerary, a map route segment, or a log
+  // card) just sets the shared selectedDay — the single source of truth. Every
+  // view reflects it in place; we don't yank the user to a different view.
+  // Clicking the already-selected day clears it and re-frames the whole trip.
+  function selectDay(offset: number) {
+    if (selectedDay === offset) {
+      setSelectedDay(null);
+      setFitSignal((n) => n + 1);
+    } else {
+      setSelectedDay(offset);
+    }
+  }
+
   async function handleMapPick(lat: number, lng: number) {
     const field = armedField;
     if (!field) return;
@@ -446,10 +459,7 @@ export default function TripPlanner() {
             <Itinerary
               days={planResult.days}
               selectedDay={selectedDay}
-              onSelectDay={(offset) => {
-                setSelectedDay(offset);
-                setView("map");
-              }}
+              onSelectDay={selectDay}
             />
           ) : (
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
@@ -620,10 +630,7 @@ export default function TripPlanner() {
           routeDimmed={stale}
           routeDays={routeDays}
           highlightDay={selectedDay}
-          onDaySelect={(offset) => {
-            setSelectedDay(offset);
-            setView("logs");
-          }}
+          onDaySelect={selectDay}
           focusPoint={focusPoint}
           fitSignal={fitSignal}
           startTimeMinutes={parseStartTimeMinutes(startTime)}
@@ -649,10 +656,7 @@ export default function TripPlanner() {
                   key={day.date_offset}
                   id={`day-log-${day.date_offset}`}
                   data-selected={selectedDay === day.date_offset ? "true" : undefined}
-                  onClick={() => {
-                    setSelectedDay(day.date_offset);
-                    setView("map");
-                  }}
+                  onClick={() => selectDay(day.date_offset)}
                   sx={{
                     bgcolor: "#fff",
                     p: 2,

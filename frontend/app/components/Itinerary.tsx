@@ -66,9 +66,10 @@ export default function Itinerary({ days, selectedDay, onSelectDay }: ItineraryP
         const selected = selectedDay === day.date_offset;
         return (
           <Box key={day.date_offset} sx={{ mb: 1.5 }}>
-            {/* Day header — click to highlight this day on the map */}
+            {/* Day header — click to highlight this day across all views */}
             <Box
               onClick={() => onSelectDay?.(day.date_offset)}
+              data-selected={selected ? "true" : undefined}
               sx={{
                 display: "flex",
                 justifyContent: "space-between",
@@ -78,10 +79,13 @@ export default function Itinerary({ days, selectedDay, onSelectDay }: ItineraryP
                 py: 0.5,
                 borderRadius: 1,
                 cursor: onSelectDay ? "pointer" : "default",
-                bgcolor: selected ? "rgba(56,189,248,0.16)" : "transparent",
+                bgcolor: selected ? "rgba(56,189,248,0.28)" : "transparent",
                 borderLeft: 3,
                 borderColor: selected ? "primary.main" : "transparent",
-                "&:hover": onSelectDay ? { bgcolor: "rgba(56,189,248,0.10)" } : undefined,
+                boxShadow: selected ? "inset 0 0 0 1px rgba(56,189,248,0.5)" : "none",
+                "&:hover": onSelectDay
+                  ? { bgcolor: selected ? "rgba(56,189,248,0.28)" : "rgba(56,189,248,0.10)" }
+                  : undefined,
               }}
             >
               <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
