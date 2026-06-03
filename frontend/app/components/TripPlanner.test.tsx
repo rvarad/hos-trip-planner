@@ -253,6 +253,44 @@ describe("TripPlanner", () => {
     await waitFor(() => expect(cycle).toBeEnabled());
   });
 
+  it("surfaces the backend's error message when planning fails", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            cycle_hours_used: ["Ensure this value is less than or equal to 70."],
+          }),
+          { status: 400, headers: { "Content-Type": "application/json" } },
+        ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TripPlanner />);
+    await resolveAll();
+    await userEvent.click(plan());
+
+    expect(
+      await screen.findByText(/less than or equal to 70/),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a friendly message when the planning service is unavailable", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ error: "The planning service is unavailable." }), {
+          status: 502,
+          headers: { "Content-Type": "application/json" },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<TripPlanner />);
+    await resolveAll();
+    await userEvent.click(plan());
+
+    expect(await screen.findByText(/service is unavailable/i)).toBeInTheDocument();
+  });
+
   it("shows a processing overlay on the map while a plan is in flight", async () => {
     let resolveFetch: (r: Response) => void = () => {};
     const fetchMock = vi.fn(
@@ -388,9 +426,31 @@ describe("TripPlanner", () => {
     // Map view: click a day's route segment (mock fires onDaySelect(1)).
     await userEvent.click(await screen.findByText("map-day-1"));
 
-    // The logs open (sheet rows visible) with that day selected.
+    // The logs open (sheet rows visible) with that day's card marked selected.
     expect((await screen.findAllByText("Sleeper Berth")).length).toBeGreaterThan(0);
     expect(screen.getByTestId("map")).toHaveAttribute("data-highlight", "1");
+    expect(document.getElementById("day-log-1")).toHaveAttribute(
+      "data-selected",
+      "true",
+    );
+  });
+
+  it("re-fits the whole trip when the selected day is cleared", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => twoDayPlan()));
+    render(<TripPlanner />);
+    await resolveAll();
+    await userEvent.click(plan());
+
+    // Select a day from the itinerary (stays on the map).
+    await userEvent.click(await screen.findByText("Day 2"));
+    const map = screen.getByTestId("map");
+    expect(map).toHaveAttribute("data-highlight", "1");
+    const fitBefore = Number(map.getAttribute("data-fit"));
+
+    // Clearing the day chip re-frames the whole trip (fitSignal bumps).
+    await userEvent.click(screen.getByTestId("CancelIcon"));
+    expect(map).toHaveAttribute("data-highlight", "");
+    expect(Number(map.getAttribute("data-fit"))).toBe(fitBefore + 1);
   });
 
   it("offers a Map/Daily Logs toggle and renders log sheets when a plan has days", async () => {

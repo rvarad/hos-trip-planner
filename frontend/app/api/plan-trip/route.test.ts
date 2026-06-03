@@ -49,4 +49,17 @@ describe("POST /api/plan-trip proxy", () => {
     const res = await POST(req({}));
     expect(res.status).toBe(400);
   });
+
+  it("returns a clean 502 JSON when the backend is unreachable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("ECONNREFUSED");
+      }),
+    );
+
+    const res = await POST(req({}));
+    expect(res.status).toBe(502);
+    expect((await res.json()).error).toMatch(/unavailable/i);
+  });
 });

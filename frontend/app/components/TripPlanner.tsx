@@ -60,6 +60,41 @@ function logDate(dayOffset: number): string {
   return `${mm} / ${dd} / ${d.getFullYear()}`;
 }
 
+// Find the first human-readable string anywhere in a parsed error body. DRF
+// nests validation messages (e.g. { pickup: { lat: ["Invalid"] } }); our proxy
+// uses { error: "..." }. This digs out the first message either way.
+function firstMessage(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    for (const v of value) {
+      const m = firstMessage(v);
+      if (m) return m;
+    }
+    return null;
+  }
+  if (value && typeof value === "object") {
+    for (const v of Object.values(value)) {
+      const m = firstMessage(v);
+      if (m) return m;
+    }
+  }
+  return null;
+}
+
+// Turn a failed plan response into a message worth showing the user.
+async function planErrorMessage(res: Response): Promise<string> {
+  try {
+    const data = await res.json();
+    const msg = firstMessage(data);
+    if (msg) return msg;
+  } catch {
+    // Non-JSON body (e.g. an HTML 500 page) — fall through to a generic message.
+  }
+  if (res.status === 502)
+    return "The planning service is unavailable. Please try again shortly.";
+  return `Something went wrong (error ${res.status}).`;
+}
+
 // A plan is a snapshot of the inputs that produced it. This key lets us detect
 // when the current inputs have drifted from that snapshot (stale plan).
 function inputsKey(
@@ -134,6 +169,15 @@ export default function TripPlanner() {
     return () => window.removeEventListener("keydown", onKey);
   }, [armedField]);
 
+  // When opening the logs for a selected day (e.g. after clicking its route on
+  // the map), scroll that day's sheet into view instead of landing on Day 1.
+  useEffect(() => {
+    if (view !== "logs" || selectedDay == null) return;
+    document
+      .getElementById(`day-log-${selectedDay}`)
+      ?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+  }, [view, selectedDay]);
+
   const cycleNum = Number(cycleHours);
   const cycleValid =
     cycleHours !== "" && !isNaN(cycleNum) && cycleNum >= 0 && cycleNum <= 70;
@@ -196,14 +240,18 @@ export default function TripPlanner() {
     setPlanResult(null);
     setView("map");
 
+    // Don't let a hung backend spin forever — abort after 30s.
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
     try {
       const res = await fetch("/api/plan-trip", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
       if (!res.ok) {
-        throw new Error(`Server error: ${res.status}`);
+        throw new Error(await planErrorMessage(res));
       }
       const data: PlanResult = await res.json();
       setPlanResult(data);
@@ -212,8 +260,13 @@ export default function TripPlanner() {
       setFitSignal((n) => n + 1); // frame the whole trip once
       setFocusPoint(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "An error occurred");
+      if ((err as { name?: string })?.name === "AbortError") {
+        setError("The request took too long. Please try again.");
+      } else {
+        setError(err instanceof Error ? err.message : "An error occurred");
+      }
     } finally {
+      clearTimeout(timeout);
       setIsLoading(false);
     }
   }
@@ -522,7 +575,11 @@ export default function TripPlanner() {
               <Chip
                 color="primary"
                 label={`Day ${selectedDay + 1}`}
-                onDelete={() => setSelectedDay(null)}
+                onDelete={() => {
+                  // Deselecting a day frames the whole trip again.
+                  setSelectedDay(null);
+                  setFitSignal((n) => n + 1);
+                }}
                 sx={{ bgcolor: "background.paper", boxShadow: 3 }}
                 variant="outlined"
               />
@@ -590,6 +647,8 @@ export default function TripPlanner() {
               return (
                 <Paper
                   key={day.date_offset}
+                  id={`day-log-${day.date_offset}`}
+                  data-selected={selectedDay === day.date_offset ? "true" : undefined}
                   onClick={() => {
                     setSelectedDay(day.date_offset);
                     setView("map");
